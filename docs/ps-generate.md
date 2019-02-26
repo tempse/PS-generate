@@ -38,4 +38,6 @@ If run successfully, the tool creates a new xlsx file ("PStable_new.xlsx") which
 contains the seeds of the passed L1 menu XML with their corresponding prescale
 values (if they existed in the passed PS table).
 
-
+A summary of the prescale values that are missing in the input file is finally
+printed to the terminal, including the estimated values for the respective
+prescale table columns. It is up to the user to fill/check those values.

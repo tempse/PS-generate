@@ -1,7 +1,7 @@
 from typing import Union
 import pandas as pd
 
-def fill_empty_val(name: str):
+def estimate_value(name: str):
     # TODO extend functionality of this method
     return None 
 
@@ -22,18 +22,20 @@ def find_table_value(pstable: pd.DataFrame, seed: str,
 
     Returns
     -------
-    Cell content corresponding to seed and col. If cell is not found, the
-    function fill_empty_val is called and its return value is forwarded.
+    Cell content corresponding to seed and col, as well as an exit code (0 if
+    the cell content was found and copied; 1 if the cell content was not found
+    and therefore estimated). If cell is not found, the function estimate_value
+    is called and its return value is forwarded.
 
     """
 
     if 'Name' not in pstable.columns:
-        raise KeyError('PS table does not have a column \'Name\'')
+        raise RuntimeError('PS table does not have a column \'Name\'')
 
     if seed in pstable['Name'].values:
-        return (pstable.loc[pstable['Name'] == seed])[col].values[0]
+        return (pstable.loc[pstable['Name'] == seed])[col].values[0], 0
     else:
-        return fill_empty_val(seed)
+        return estimate_value(seed), 1
 
 
 def make_empty_table(pstable: pd.DataFrame) -> pd.DataFrame:
