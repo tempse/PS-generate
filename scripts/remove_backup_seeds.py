@@ -194,8 +194,8 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
         # criterion_pT,
         # criterion_er,
         # criterion_dRmax,
-        criterion_dRmin,
-        # criterion_MassXtoY,
+        # criterion_dRmin,
+        criterion_MassXtoY,
         # criterion_quality,
         # criterion_isolation,
     ]
@@ -494,7 +494,100 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
 
 
 def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
-    raise NotImplementedError
+    """
+    Checks whether 'seed' has a tigher mass cut than 'otherseed'.
+
+    If not explicitly specified, no mass cuts are applied.
+
+    This function does not process any seeds which involve more than one mass
+    cut (e.g., cross-triggers). Further, if 'seed' and 'otherseed' have
+    any differences apart from their mass restrictions, this function will pass
+    on them as well.
+
+    Parameters
+    ---------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise
+
+    """
+
+    is_backup_candidate = False
+
+    seed_basename = get_seed_basename(seed)
+    otherseed_basename = get_seed_basename(otherseed)
+
+    # skip if different seeds altogether
+    if seed_basename != otherseed_basename:
+        return False, None
+
+    # do not process further if there are multiple mass restrictions in a seed
+    pattern = r'Mass(_*?)(\d+p\d+|\d+)to(\d+p\d+|\d+)'
+    if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
+        return False, None
+
+    # do not process further if neither seed has an mass restriction
+    if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
+        return False, None
+
+    # extract the mass restriction substring for 'seed'
+    seed_mass_str = re.search(pattern, seed)
+    if seed_mass_str:
+        seed_mass_str = seed_mass_str.group(0)
+        seed_stripped = seed.strip(seed_mass_str)
+        if seed_stripped.endswith('_'): seed_stripped = seed_stripped[:-1]
+    else:
+        seed_stripped = seed
+
+    # extract the mass restriction substring for 'otherseed'
+    otherseed_mass_str = re.search(pattern, otherseed)
+    if otherseed_mass_str:
+        otherseed_mass_str = otherseed_mass_str.group(0)
+        otherseed_stripped = otherseed.strip(otherseed_mass_str)
+        if otherseed_stripped.endswith('_'): otherseed_stripped = otherseed_stripped[:-1]
+    else:
+        otherseed_stripped = otherseed
+
+    # do not process further if the seeds are different (apart from their mass cuts)
+    if seed_stripped != otherseed_stripped:
+        return False, None
+
+    if seed_mass_str is not None:
+        search_res = re.search('\d', seed_mass_str)
+        seed_mass_str = seed_mass_str[search_res.start():]
+        seed_mass_str = seed_mass_str.split('to')
+        seed_mass_range = [convert_to_float(val) for val in seed_mass_str]
+    else:
+        seed_mass_range = None
+
+    if otherseed_mass_str is not None:
+        search_res = re.search('\d', otherseed_mass_str)
+        otherseed_mass_str = otherseed_mass_str[search_res.start():]
+        otherseed_mass_str = otherseed_mass_str.split('to')
+        otherseed_mass_range = [convert_to_float(val) for val in otherseed_mass_str]
+    else:
+        otherseed_mass_range = None
+
+    if seed_mass_range is not None and otherseed_mass_range is not None and \
+            seed_mass_range[1]-seed_mass_range[0] < otherseed_mass_range[1]-otherseed_mass_range[0]:
+        is_backup_candidate = True
+
+    if seed_mass_range is not None and otherseed_mass_range is None:
+        is_backup_candidate = True
+
+    return is_backup_candidate, (otherseed if is_backup_candidate else None)
 
 
 def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
