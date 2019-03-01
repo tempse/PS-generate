@@ -160,12 +160,13 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
 
     # collection of functions that define backup-seed criteria
     criterion_functions = [
+        criterion_prescale,
         # criterion_pT,
         # criterion_er,
         # criterion_dRmax,
         # criterion_dRmin,
         # criterion_MassXtoY,
-        criterion_quality,
+        # criterion_quality,
         # criterion_isolation,
     ]
 
@@ -176,10 +177,11 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
                     otherseed, otherprescale)
 
             if is_backup_seed:
-                print('+++ backup: {};    signal: {}'.format(seed,otherseed))
-            else:
+                print('+++ backup: {} (PS: {});    signal: {} (PS: {})'.format(seed,prescale,otherseed,otherprescale))
                 pass
+            else:
                 # print('--- backup: {};    signal: {}'.format(otherseed,seed))
+                pass
 
             # TODO assign seed depending on whether it is a backup seed
 
@@ -316,7 +318,39 @@ def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: i
 
 
 def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
-    raise NotImplementedError
+    """
+    Checks whether 'seed' has a higher prescale value than 'otherseed'.
+
+    Only checks for different prescale values. If the seed names are different,
+    this function will not process them.
+
+    Parameters
+    ----------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise
+
+    """
+
+    is_backup_candidate = False
+    identified_signal_seed = None
+    if seed == otherseed and prescale > otherprescale:
+        is_backup_candidate = True
+        identified_signal_seed = otherseed
+
+    return is_backup_candidate, identified_signal_seed
 
 
 def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
@@ -324,6 +358,8 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale:
 
 
 if __name__ == '__main__':
+    print('\n*** WARNING: This script is under development. Use with caution! ***\n')
+
     parser = argparse.ArgumentParser()
     parser.add_argument('filename',
             help='Name/path of the PS table file',
