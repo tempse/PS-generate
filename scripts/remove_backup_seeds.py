@@ -192,9 +192,9 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
     criterion_functions = [
         # criterion_prescale,
         # criterion_pT,
-        criterion_er,
+        # criterion_er,
         # criterion_dRmax,
-        # criterion_dRmin,
+        criterion_dRmin,
         # criterion_MassXtoY,
         # criterion_quality,
         # criterion_isolation,
@@ -314,11 +314,183 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
 
 def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
-    raise NotImplementedError
+    """
+    Checks whether 'seed' has a tigher dRmax restriction cut than 'otherseed'.
+
+    If not explicitly specified, no dRmax restriction is applied.
+
+    This function does not process any seeds which involve more than one dRmax
+    restriction (e.g., cross-triggers). Further, if 'seed' and 'otherseed' have
+    any differences apart from their dRmax restrictions, this function will pass
+    on them as well.
+
+    Parameters
+    ---------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise
+
+    """
+
+    is_backup_candidate = False
+
+    seed_basename = get_seed_basename(seed)
+    otherseed_basename = get_seed_basename(otherseed)
+
+    # skip if different seeds altogether
+    if seed_basename != otherseed_basename:
+        return False, None
+
+    # do not process further if there are multiple dRmax restrictions
+    pattern = r'dR_Max(\d+)p(\d+)|dR_Max(\d+)'
+    if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
+        return False, None
+
+    # do not process further if neither seed has a dRmax restriction
+    if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
+        return False, None
+
+    # extract the dRmax restriction substring for 'seed'
+    seed_dRmax_str = re.search(pattern, seed)
+    if seed_dRmax_str:
+        seed_dRmax_str = seed_dRmax_str.group(0)
+        seed_stripped = seed.strip(seed_dRmax_str)
+    else:
+        seed_stripped = seed
+
+    # extract the dRmax restriction substring for 'otherseed'
+    otherseed_dRmax_str = re.search(pattern, otherseed)
+    if otherseed_dRmax_str:
+        otherseed_dRmax_str = otherseed_dRmax_str.group(0)
+        otherseed_stripped = otherseed.strip(otherseed_dRmax_str)
+    else:
+        otherseed_stripped = otherseed
+
+    # do not process further if the seeds are different (apart from their dRmax)
+    if seed_stripped != otherseed_stripped:
+        return False, None
+
+    if seed_dRmax_str is not None:
+        seed_dRmax_val = convert_to_float(seed_dRmax_str.replace('dR_Max',''))
+    else:
+        seed_dRmax_val = None
+
+    if otherseed_dRmax_str is not None:
+        otherseed_dRmax_val = convert_to_float(otherseed_dRmax_str.replace('dR_Max',''))
+    else:
+        otherseed_dRmax_val = None
+
+    if seed_dRmax_val is not None and otherseed_dRmax_val is not None and \
+            seed_dRmax_val < otherseed_dRmax_val:
+        is_backup_candidate = True
+
+    if seed_dRmax_val is not None and otherseed_dRmax_val is None and \
+            seed_dRmax_val > 0.0:
+        is_backup_candidate = True
+
+    return is_backup_candidate, (otherseed if is_backup_candidate else None)
 
 
 def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
-    raise NotImplementedError
+    """
+    Checks whether 'seed' has a tigher dRmin restriction cut than 'otherseed'.
+
+    If not explicitly specified, no dRmin restriction is applied.
+
+    This function does not process any seeds which involve more than one dRmin
+    restriction (e.g., cross-triggers). Further, if 'seed' and 'otherseed' have
+    any differences apart from their dRmin restrictions, this function will pass
+    on them as well.
+
+    Parameters
+    ---------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise
+
+    """
+
+    is_backup_candidate = False
+
+    seed_basename = get_seed_basename(seed)
+    otherseed_basename = get_seed_basename(otherseed)
+
+    # skip if different seeds altogether
+    if seed_basename != otherseed_basename:
+        return False, None
+
+    # do not process further if there are multiple dRmin restrictions
+    pattern = r'dR_Min(\d+)p(\d+)|dR_Min(\d+)'
+    if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
+        return False, None
+
+    # do not process further if neither seed has a dRmin restriction
+    if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
+        return False, None
+
+    # extract the dRmin restriction substring for 'seed'
+    seed_dRmin_str = re.search(pattern, seed)
+    if seed_dRmin_str:
+        seed_dRmin_str = seed_dRmin_str.group(0)
+        seed_stripped = seed.strip(seed_dRmin_str)
+    else:
+        seed_stripped = seed
+
+    # extract the dRmin restriction substring for 'otherseed'
+    otherseed_dRmin_str = re.search(pattern, otherseed)
+    if otherseed_dRmin_str:
+        otherseed_dRmin_str = otherseed_dRmin_str.group(0)
+        otherseed_stripped = otherseed.strip(otherseed_dRmin_str)
+    else:
+        otherseed_stripped = otherseed
+
+    # do not process further if the seeds are different (apart from their dRmin)
+    if seed_stripped != otherseed_stripped:
+        return False, None
+
+    if seed_dRmin_str is not None:
+        seed_dRmin_val = convert_to_float(seed_dRmin_str.replace('dR_Min',''))
+    else:
+        seed_dRmin_val = None
+
+    if otherseed_dRmin_str is not None:
+        otherseed_dRmin_val = convert_to_float(otherseed_dRmin_str.replace('dR_Min',''))
+    else:
+        otherseed_dRmin_val = None
+
+    if seed_dRmin_val is not None and otherseed_dRmin_val is not None and \
+            seed_dRmin_val > otherseed_dRmin_val:
+        is_backup_candidate = True
+
+    if seed_dRmin_val is not None and otherseed_dRmin_val is None and \
+            seed_dRmin_val > 0.0:
+        is_backup_candidate = True
+
+    return is_backup_candidate, (otherseed if is_backup_candidate else None)
 
 
 def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
