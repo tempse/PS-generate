@@ -1,4 +1,5 @@
 import os
+from typing import Union
 import argparse
 import csv
 import re
@@ -132,6 +133,35 @@ def get_seed_basename(seed: str) -> str:
     return 'L1_'+basename
 
 
+def convert_to_float(val: str) -> Union[float,None]:
+    """
+    Takes a string and tries to convert it to a float.
+
+    Parameters
+    ----------
+    val : str
+        String holding the float number, examples of allowed format are '1.2'
+        and '1p2'.
+
+    Returns
+    -------
+    float, None
+        The converted number as a float, None if the conversion was unsuccessful
+
+    """
+
+    return_val = None
+    val = val.replace('_','')  # just to be sure
+    if 'p' in val: val = val.replace('p','.')
+    try:
+        return_val = float(val)
+    except ValueError:
+        pass
+
+    return return_val
+
+
+
 def separate_signal_and_backup_seeds(table: pd.DataFrame) -> (pd.DataFrame,
         pd.DataFrame):
     # TODO add docstring
@@ -160,9 +190,9 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
 
     # collection of functions that define backup-seed criteria
     criterion_functions = [
-        criterion_prescale,
+        # criterion_prescale,
         # criterion_pT,
-        # criterion_er,
+        criterion_er,
         # criterion_dRmax,
         # criterion_dRmin,
         # criterion_MassXtoY,
@@ -193,9 +223,96 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
 
 def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
-    raise NotImplementedError
+    """
+    Checks whether 'seed' has a tigher eta restriction cut than 'otherseed'.
 
-    
+    Eta restriction: |eta| < threshold. If not explicitly specified, no eta
+    restrictions are applied.
+
+    This function does not process any seeds which involve more than one eta
+    restriction (e.g., cross-triggers). Further, if 'seed' and 'otherseed' have
+    any differences apart from their eta restrictions, this function will pass
+    on them as well.
+
+    Parameters
+    ---------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise
+
+    """
+
+    is_backup_candidate = False
+
+    seed_basename = get_seed_basename(seed)
+    otherseed_basename = get_seed_basename(otherseed)
+
+    # skip if different seeds altogether
+    if seed_basename != otherseed_basename:
+        return False, None
+
+    # do not process further if there are multiple eta restrictions in a seed
+    pattern = r'er(\d+)p(\d+)|er(\d+)'
+    if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
+        return False, None
+
+    # do not process further if neither seed has an eta restriction
+    if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
+        return False, None
+
+    # extract the eta restriction substring for 'seed'
+    seed_er_str = re.search(pattern, seed)
+    if seed_er_str:
+        seed_er_str = seed_er_str.group(0)
+        seed_stripped = seed.strip(seed_er_str)
+    else:
+        seed_stripped = seed
+
+    # extract the eta restriction substring for 'otherseed'
+    otherseed_er_str = re.search(pattern, otherseed)
+    if otherseed_er_str:
+        otherseed_er_str = otherseed_er_str.group(0)
+        otherseed_stripped = otherseed.strip(otherseed_er_str)
+    else:
+        otherseed_stripped = otherseed
+
+    # do not process further if the seeds are different (apart from their ER)
+    if seed_stripped != otherseed_stripped:
+        return False, None
+
+    if seed_er_str is not None:
+        seed_er_val = convert_to_float(seed_er_str.replace('er',''))
+    else:
+        seed_er_val = None
+
+    if otherseed_er_str is not None:
+        otherseed_er_val = convert_to_float(otherseed_er_str.replace('er',''))
+    else:
+        otherseed_er_val = None
+
+    if seed_er_val is not None and otherseed_er_val is not None and \
+            seed_er_val < otherseed_er_val:
+        is_backup_candidate = True
+
+    if seed_er_val is not None and otherseed_er_val is None and \
+            seed_er_val > 0.0:
+        is_backup_candidate = True
+
+    return is_backup_candidate, (otherseed if is_backup_candidate else None)
+
+
 def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
     raise NotImplementedError
 
