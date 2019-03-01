@@ -207,8 +207,40 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
 
 
 def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
-    # TODO explain what SQ, DQ, OQ stand for
-    # TODO check the following logic
+    """
+    Checks whether 'otherseed' has a looser quality criterion than 'seed'.
+
+    This will only check SingleMu, DoubleMu, TripleMu and QuadMu seeds.
+
+    Known muon quality criteria are (ordered from 'tighter' to 'looser' cuts):
+    - SQ: 'single' quality
+    - DQ: 'double' quality
+    - OQ: 'open' quality
+
+    Default qualities (if not explicitly given in the seed name):
+    - SQ for single muon seeds
+    - DQ for multi-muon seeds
+
+    Parameters
+    ---------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise
+
+    """
+
     is_backup_candidate = False
 
     qualities = ('_SQ','_DQ','_OQ')
@@ -218,100 +250,65 @@ def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: i
     if seed_basename is None:
         return False, None
 
+    if not any([muontype in seed_basename.lower() for muontype in ('singlemu',
+            'doublemu', 'triplemu', 'quadmu')]):
+        return False, None
+
     if not otherseed.startswith(seed_basename):
         return False, None
+
+    do_further_checks = False
 
     if 'singlemu' in seed_basename.lower():
         # if single muon seed has default quality (i.e., 'SQ'; not explicitly
         # given in the seed name) and the other seed has a looser quality
         # criterion (i.e., 'DQ' or 'OQ')
-        if all([quality not in seed for quality in ('_SQ','_DQ','_OQ')]) and \
-                any([quality in otherseed for quality in ('_DQ','_OQ')]):
-            # check whether the rest of the seed names matches
-            # TODO this will not recognize backup seeds if two qualities change at the same time (eg, pT cut and eta restriction)
-            seed_stripped = seed
-            otherseed_stripped = otherseed
-            for substr in ((seed_basename,) + qualities):
-                seed_stripped = seed_stripped.replace(substr,'')
-                otherseed_stripped = otherseed_stripped.replace(substr,'')
+        if all([quality not in seed for quality in qualities]) or '_SQ' in seed:
+            is_SQ_seed = True
+        else:
+            is_SQ_seed = False
 
-            if seed_stripped == otherseed_stripped:
-                is_backup_candidate = True
-
-        if '_SQ' in seed and any([quality in otherseed for quality in ('_DQ','_OQ')]):
-            seed_stripped = seed
-            otherseed_stripped = otherseed
-            for substr in ((seed_basename,) + qualities):
-                seed_stripped = seed_stripped.replace(substr,'')
-                otherseed_stripped = otherseed_stripped.replace(substr,'')
-
-            if seed_stripped == otherseed_stripped:
-                is_backup_candidate = True
+        if is_SQ_seed and any([quality in otherseed for quality in ('_DQ','_OQ')]):
+            do_further_checks = True
 
         if '_DQ' in seed and '_OQ' in otherseed:
-            seed_stripped = seed
-            otherseed_stripped = otherseed
-            for substr in ((seed_basename,) + qualities):
-                seed_stripped = seed_stripped.replace(substr,'')
-                otherseed_stripped = otherseed_stripped.replace(substr,'')
+            do_further_checks = True
 
-            if seed_stripped == otherseed_stripped:
-                is_backup_candidate = True
-
-    if 'doublemu' in seed_basename.lower():
+    # the default quality is 'DQ' for all of these seed types, so they can be
+    # treated equally here
+    if any([muontype in seed_basename.lower() for muontype in ('doublemu',
+            'triplemu', 'quadmu')]):
         # if double muon seed has default quality (i.e., 'DQ'; not explicitly
         # given in the seed name) and the other seed has a looser quality
         # criterion (i.e., 'OQ')
-        if '_SQ' in seed and all([quality not in otherseed for quality in ('_SQ','_DQ','_OQ')]):
-        # if all([quality not in seed for quality in ('_SQ','_DQ','_OQ')]) and \
-        #         '_OQ' in otherseed:
-            # check whether the rest of the seed names matches
-            # TODO this will not recognize backup seeds if two qualities change at the same time (eg, pT cut and eta restriction)
-            seed_stripped = seed
-            otherseed_stripped = otherseed
-            for substr in ((seed_basename,) + qualities):
-                seed_stripped = seed_stripped.replace(substr,'')
-                otherseed_stripped = otherseed_stripped.replace(substr,'')
+        if all([quality not in seed for quality in qualities]) or '_DQ' in seed:
+            is_DQ_seed = True
+        else:
+            is_DQ_seed = False
 
-            if seed_stripped == otherseed_stripped:
-                is_backup_candidate = True
+        if all([quality not in otherseed for quality in qualities]) or \
+                '_DQ' in otherseed:
+            is_DQ_otherseed = True
+        else:
+            is_DQ_otherseed = False
 
-        if '_SQ' in seed and any([quality in otherseed for quality in ('_DQ','_OQ')]):
-            seed_stripped = seed
-            otherseed_stripped = otherseed
-            for substr in ((seed_basename,) + qualities):
-                seed_stripped = seed_stripped.replace(substr,'')
-                otherseed_stripped = otherseed_stripped.replace(substr,'')
+        if '_SQ' in seed and (is_DQ_otherseed or '_OQ' in otherseed):
+            do_further_checks = True
 
-            if seed_stripped == otherseed_stripped:
-                is_backup_candidate = True
+        if is_DQ_seed and '_OQ' in otherseed:
+            do_further_checks = True
 
-        if all([quality not in seed for quality in ('_SQ','_DQ','_OQ')]) and \
-                '_OQ' in otherseed:
-            seed_stripped = seed
-            otherseed_stripped = otherseed
-            for substr in ((seed_basename,) + qualities):
-                seed_stripped = seed_stripped.replace(substr,'')
-                otherseed_stripped = otherseed_stripped.replace(substr,'')
+    if do_further_checks:
+        # require exact matches for the rest of the seed names
+        seed_stripped = seed
+        otherseed_stripped = otherseed
+        for substr in ((seed_basename,) + qualities):
+            seed_stripped = seed_stripped.replace(substr,'')
+            otherseed_stripped = otherseed_stripped.replace(substr,'')
 
-            if seed_stripped == otherseed_stripped:
-                is_backup_candidate = True
+        if seed_stripped == otherseed_stripped:
+            is_backup_candidate = True
 
-        if '_DQ' in seed and '_OQ' in otherseed:
-            seed_stripped = seed
-            otherseed_stripped = otherseed
-            for substr in ((seed_basename,) + qualities):
-                seed_stripped = seed_stripped.replace(substr,'')
-                otherseed_stripped = otherseed_stripped.replace(substr,'')
-
-            if seed_stripped == otherseed_stripped:
-                is_backup_candidate = True
-
-    if 'triplemu' in seed_basename.lower():
-        pass
-
-    if 'quadmu' in seed_basename.lower():
-        pass
 
     identified_signal_seed = otherseed if is_backup_candidate else None
 
