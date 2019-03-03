@@ -166,8 +166,9 @@ def convert_to_float(val: str) -> Union[float,None]:
 
 
 
-def separate_signal_and_backup_seeds(table: pd.DataFrame, verbose=True) -> (pd.DataFrame,
-        pd.DataFrame):
+def separate_signal_and_backup_seeds(table: pd.DataFrame,
+        keep_zero_prescales=False, verbose=True) -> (pd.DataFrame,
+                pd.DataFrame):
     # TODO add docstring
 
     signal_seeds = pd.DataFrame(columns=table.columns)
@@ -182,27 +183,50 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame, verbose=True) -> (pd.D
         seed = row[name_col_idx]
         prescale = row[PS_col_idx]
 
-        is_backup_seed, identified_signal_seeds, criteria = has_signal_seed(seed, prescale,
-                table.iloc[:,name_col_idx].tolist(), table.iloc[:,PS_col_idx].tolist())
+        # ignore seeds that don't add to the total rate
+        if not keep_zero_prescales and prescale == 0: continue
+
+        is_backup_seed, identified_signal_seeds, criteria = has_signal_seed(
+                seed, prescale, table.iloc[:,name_col_idx].tolist(),
+                table.iloc[:,PS_col_idx].tolist(),
+                keep_zero_prescales=keep_zero_prescales)
+
+        signal_seeds_prescales = [(table[table.iloc[:,name_col_idx]==s].iloc[:,
+            PS_col_idx]) for s in identified_signal_seeds]
+        signal_seeds_prescales = [int(ps) for ps in signal_seeds_prescales]
+
+        identified_signal_seeds = ['{} (PS: {})'.format(s,str(ps)) for s,ps in \
+                zip(identified_signal_seeds,signal_seeds_prescales)]
 
         if is_backup_seed:
             backup_seeds = backup_seeds.append(table.iloc[idx,:])
-            backup_seeds_info.append([seed, ', '.join(identified_signal_seeds),
-                ', '.join(criteria)])
+            backup_seeds_info.append([seed, prescale,
+                ', '.join(identified_signal_seeds), ', '.join(criteria)])
 
         else:
             signal_seeds = signal_seeds.append(table.iloc[idx,:])
 
+    backup_seeds_info_headers = ['Identified backup seed',
+            'prescale value',
+            'corresponding signal seeds (incl. prescales)',
+            'used criteria (in signal seed order)']
     if verbose:
-        print(tabulate(backup_seeds_info, headers=['Identified backup seed',
-            'corresponding signal seeds',
-            'used criteria (in signal seed order)']))
+        print(tabulate(backup_seeds_info, headers=backup_seeds_info_headers))
+
+    backup_seeds_summary_fname = 'backup_seeds_summary.html'
+    with open(backup_seeds_summary_fname,'w') as f_summary:
+        f_summary.write(tabulate(backup_seeds_info,
+            headers=backup_seeds_info_headers, tablefmt='html'))
+        if verbose:
+            print('\nFile created: {} (contains the above backup seeds '
+                    'summary)'.format(backup_seeds_summary_fname))
 
     return signal_seeds, backup_seeds
 
 
 def has_signal_seed(seed: str, prescale: int, all_seeds: list,
-        all_prescales: list) -> (bool, list, list):
+        all_prescales: list, keep_zero_prescales : bool = False) -> (bool,
+                list, list):
     # TODO add docstring
 
     # collection of functions that define backup-seed criteria
@@ -225,7 +249,8 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
         for criterion in criterion_functions:
             if not all([type(s) == str for s in (seed,otherseed)]): continue
             is_backup_candidate, identified_signal_seed, identified_criterion = criterion(
-                    seed, prescale, otherseed, otherprescale)
+                    seed, prescale, otherseed, otherprescale,
+                    ignore_prescale=(True if keep_zero_prescales else False))
 
             if is_backup_candidate:
                 is_backup_seed = True
@@ -235,7 +260,8 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
     return is_backup_seed, identified_signal_seeds, criteria
 
 
-def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
+def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
+        ignore_prescale : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher pT cut than 'otherseed'.
 
@@ -272,6 +298,11 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
     otherprescale : int
         Prescale value for 'otherseed'
 
+    Optional parameters
+    -------------------
+    ignore_prescale : bool
+        Ignore if the two seeds have different prescale values (default: False)
+
     Returns
     -------
     (bool, str, str)
@@ -281,6 +312,12 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
         seed)
 
     """
+
+    if not ignore_prescale and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_prescale and otherprescale == 0:
+        return False, None, None
 
     is_backup_candidate = False
 
@@ -590,7 +627,8 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
             ('pT' if is_backup_candidate else None)
 
 
-def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
+def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
+        ignore_prescale : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher eta restriction cut than 'otherseed'.
 
@@ -613,6 +651,11 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
     otherprescale : int
         Prescale value for 'otherseed'
 
+    Optional parameters
+    -------------------
+    ignore_prescale : bool
+        Ignore if the two seeds have different prescale values (default: False)
+
     Returns
     -------
     (bool, str)
@@ -622,6 +665,12 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
         backup seed)
 
     """
+
+    if not ignore_prescale and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_prescale and otherprescale == 0:
+        return False, None, None
 
     is_backup_candidate = False
 
@@ -683,7 +732,8 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
             ('eta restriction' if is_backup_candidate else None)
 
 
-def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
+def criterion_dRmax(seed: str, prescale: int, otherseed: str,
+        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher dRmax restriction cut than 'otherseed'.
 
@@ -705,6 +755,11 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
     otherprescale : int
         Prescale value for 'otherseed'
 
+    Optional parameters
+    -------------------
+    ignore_prescale : bool
+        Ignore if the two seeds have different prescale values (default: False)
+
     Returns
     -------
     (bool, str)
@@ -714,6 +769,12 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
         seed)
 
     """
+
+    if not ignore_prescale and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_prescale and otherprescale == 0:
+        return False, None, None
 
     is_backup_candidate = False
 
@@ -775,7 +836,8 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
             ('dR_Max' if is_backup_candidate else None)
 
 
-def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
+def criterion_dRmin(seed: str, prescale: int, otherseed: str,
+        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher dRmin restriction cut than 'otherseed'.
 
@@ -797,6 +859,11 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
     otherprescale : int
         Prescale value for 'otherseed'
 
+    Optional parameters
+    -------------------
+    ignore_prescale : bool
+        Ignore if the two seeds have different prescale values (default: False)
+
     Returns
     -------
     (bool, str)
@@ -806,6 +873,12 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
         backup seed)
 
     """
+
+    if not ignore_prescale and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_prescale and otherprescale == 0:
+        return False, None, None
 
     is_backup_candidate = False
 
@@ -867,7 +940,8 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
             ('dR_Min' if is_backup_candidate else None)
 
 
-def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
+def criterion_MassXtoY(seed: str, prescale: int, otherseed: str,
+        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher mass cut than 'otherseed'.
 
@@ -889,6 +963,11 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
     otherprescale : int
         Prescale value for 'otherseed'
 
+    Optional parameters
+    -------------------
+    ignore_prescale : bool
+        Ignore if the two seeds have different prescale values (default: False)
+
     Returns
     -------
     (bool, str)
@@ -898,6 +977,12 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
         seed)
 
     """
+
+    if not ignore_prescale and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_prescale and otherprescale == 0:
+        return False, None, None
 
     is_backup_candidate = False
 
@@ -966,7 +1051,8 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
             ('MassXtoY' if is_backup_candidate else None)
 
 
-def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
+def criterion_quality(seed: str, prescale: int, otherseed: str,
+        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tighter quality criterion than 'otherseed'.
 
@@ -992,6 +1078,11 @@ def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: i
     otherprescale : int
         Prescale value for 'otherseed'
 
+    Optional parameters
+    -------------------
+    ignore_prescale : bool
+        Ignore if the two seeds have different prescale values (default: False)
+
     Returns
     -------
     (bool, str)
@@ -1001,6 +1092,12 @@ def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: i
         backup seed)
 
     """
+
+    if not ignore_prescale and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_prescale and otherprescale == 0:
+        return False, None, None
 
     is_backup_candidate = False
 
@@ -1077,7 +1174,8 @@ def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: i
             ('muon quality' if is_backup_candidate else None)
 
 
-def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
+def criterion_prescale(seed: str, prescale: int, otherseed: str,
+        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a higher prescale value than 'otherseed'.
 
@@ -1095,6 +1193,11 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: 
     otherprescale : int
         Prescale value for 'otherseed'
 
+    Optional parameters
+    -------------------
+    ignore_prescale : bool
+        Ignore if the two seeds have different prescale values (default: False)
+
     Returns
     -------
     (bool, str)
@@ -1104,6 +1207,12 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: 
         backup seed)
 
     """
+
+    if not ignore_prescale and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_prescale and otherprescale == 0:
+        return False, None, None
 
     is_backup_candidate = False
     identified_signal_seed = None
@@ -1115,7 +1224,8 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: 
             ('prescale' if is_backup_candidate else None)
 
 
-def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
+def criterion_isolation(seed: str, prescale: int, otherseed: str,
+        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher isolation cut than 'otherseed'.
 
@@ -1140,6 +1250,11 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale:
     otherprescale : int
         Prescale value for 'otherseed'
 
+    Optional parameters
+    -------------------
+    ignore_prescale : bool
+        Ignore if the two seeds have different prescale values (default: False)
+
     Returns
     -------
     (bool, str)
@@ -1149,6 +1264,12 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale:
         backup seed)
 
     """
+
+    if not ignore_prescale and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_prescale and otherprescale == 0:
+        return False, None, None
 
     is_backup_candidate = False
 
@@ -1217,20 +1338,29 @@ if __name__ == '__main__':
             help='Make script less verbose',
             action='store_true',
             dest='quietmode')
+    parser.add_argument('--keep-zero-prescales',
+            help='Do not ignore seeds with zero prescales (default: False)',
+            action='store_true',
+            dest='keep_zero_prescales')
 
     args = parser.parse_args()
 
-    outfile_signal = 'signal_seeds.csv'
-    outfile_backup = 'backup_seeds.csv'
+    outfile_signal = 'signal_seeds'
+    outfile_backup = 'backup_seeds'
 
     table = read_table(args.filename)
     signal_seeds, backup_seeds = separate_signal_and_backup_seeds(table,
+            keep_zero_prescales=(True if args.keep_zero_prescales else False),
             verbose=(False if args.quietmode else True))
 
-    signal_seeds.to_csv(outfile_signal)
+    signal_seeds.to_csv(outfile_signal+'.csv')
+    signal_seeds.to_html(outfile_signal+'.html')
     if not args.quietmode:
-        print('\nFile created: {} (contains signal seeds)'.format(outfile_signal))
+        print('\nFiles created: {}[.csv/.html] (each contains {} signal seeds)'.format(
+            outfile_signal, signal_seeds.shape[0]))
 
-    backup_seeds.to_csv(outfile_backup)
+    backup_seeds.to_csv(outfile_backup+'.csv')
+    backup_seeds.to_html(outfile_backup+'.html')
     if not args.quietmode:
-        print('File created: {} (contains backup seeds)'.format(outfile_backup))
+        print('Files created: {}[.csv/.html] (each contains {} backup seeds)'.format(
+            outfile_backup, backup_seeds.shape[0]))
