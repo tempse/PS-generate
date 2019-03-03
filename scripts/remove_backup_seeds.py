@@ -151,6 +151,9 @@ def convert_to_float(val: str) -> Union[float,None]:
     """
 
     return_val = None
+
+    if val is None: return return_val
+
     val = val.replace('_','')  # just to be sure
     if 'p' in val: val = val.replace('p','.')
     try:
@@ -191,13 +194,13 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
     # collection of functions that define backup-seed criteria
     criterion_functions = [
         # criterion_prescale,
-        # criterion_pT,
+        criterion_pT,
         # criterion_er,
         # criterion_dRmax,
         # criterion_dRmin,
         # criterion_MassXtoY,
         # criterion_quality,
-        criterion_isolation,
+        # criterion_isolation,
     ]
 
     for otherseed,otherprescale in zip(all_seeds, all_prescales):
@@ -219,7 +222,356 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
 
 
 def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
-    raise NotImplementedError
+    """
+    Checks whether 'seed' has a tigher pT cut than 'otherseed'.
+
+    Supported formats (all formats allow for an optional single underscore
+    before the first threshold value, all further threshold values must be
+    separated by '_'):
+    - single object seeds of the form L1_[NAME][THRESHOLD]*
+    - double object seeds of the form L1_*double*[THRESHOLD] or
+      L1_*double*[THRESHOLD1]_[THRESHOLD2]
+    - triple object seeds of the form L1_*triple*[THRESHOLD]* or
+      L1_*triple*[THRESHOLD1]_[THRESHOLD2]_[THRESHOLD3]
+    - quadruple object seeds of the form L1_*quad*[THRESHOLD]* or
+      L1_*quad*[THRESHOLD1]_[THRESHOLD2]_[THRESHOLD3]_[THRESHOLD4]
+
+    In case of multi-object seeds, all given thresholds of 'otherseed' must
+    individually be greater than or equal to the respective thresholds of
+    'seed' in order for the latter to be considered as a backup seed candidate
+    (i.e., 'seed' is not immediately discarded).
+
+    If 'seed' and 'otherseed' have any differences apart from their pT cuts,
+    this function will not process them.
+
+    Note: This function does not yet work for seeds with an eta criterion
+    directly attached to the pT threshold (e.g., L1_SingleMu6er1p5).
+
+    Parameters
+    ---------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise
+
+    """
+
+    is_backup_candidate = False
+
+    seed_basename = get_seed_basename(seed)
+    otherseed_basename = get_seed_basename(otherseed)
+
+    # skip if different seeds altogether
+    if seed_basename != otherseed_basename:
+        return False, None
+    elif seed_basename is None or otherseed_basename is None:
+        return False, None
+
+    # distinguish between single, double, triple and quadruple seed objects
+
+    # process single-object case first
+    if not any([t in seed_basename.lower() for t in ('double','triple','quad')]):
+        pattern = r'{}(_*?)(\d+p\d+|\d+)($|\_[a-zA-Z]+)'.format(seed_basename)
+
+        seed_pt_str = re.search(pattern, seed)
+        if seed_pt_str:
+            seed_stripped = seed.replace(
+                    seed_basename + seed_pt_str.group(1) + seed_pt_str.group(2),
+                    seed_basename)
+            seed_pt_threshold = convert_to_float(seed_pt_str.group(2))
+            seed_pt_str = seed_pt_str.group(0)
+        else:
+            seed_stripped = seed
+            seed_pt_threshold = None
+
+        otherseed_pt_str = re.search(pattern, otherseed)
+        if otherseed_pt_str:
+            otherseed_stripped = otherseed.replace(
+                    otherseed_basename + otherseed_pt_str.group(1) + \
+                            otherseed_pt_str.group(2), otherseed_basename)
+            otherseed_pt_threshold = convert_to_float(otherseed_pt_str.group(2))
+            otherseed_pt_str = otherseed_pt_str.group(0)
+        else:
+            otherseed_stripped = otherseed
+            otherseed_pt_threshold = None
+
+        # skip if seeds are different apart from their pT criterion
+        if seed_stripped != otherseed_stripped:
+            return False, None
+
+        if seed_pt_threshold is not None and otherseed_pt_threshold is not None \
+                and seed_pt_threshold > otherseed_pt_threshold:
+            is_backup_candidate = True
+
+    # process double-object seeds
+    elif 'double' in seed_basename.lower():
+        pattern = r'{}(_*?)(\d+p\d+|\d+)($|(\_(\d+p\d+|\d+)|\_[a-zA-Z]+))'.format(seed_basename)
+
+        seed_pt_str = re.search(pattern, seed)
+        if seed_pt_str:
+            seed_stripped = seed.replace(
+                    seed_basename + seed_pt_str.group(1) + seed_pt_str.group(2),
+                    seed_basename)
+            seed_pt_threshold_1 = convert_to_float(seed_pt_str.group(2))
+            seed_pt_threshold_2 = convert_to_float(seed_pt_str.group(3))
+            seed_pt_str = seed_pt_str.group(0)
+        else:
+            seed_stripped = seed
+            seed_pt_threshold_1 = None
+            seed_pt_threshold_2 = None
+
+        otherseed_pt_str = re.search(pattern, otherseed)
+        if otherseed_pt_str:
+            otherseed_stripped = otherseed.replace(
+                    otherseed_basename + otherseed_pt_str.group(1) + \
+                            otherseed_pt_str.group(2), otherseed_basename)
+            otherseed_pt_threshold_1 = convert_to_float(otherseed_pt_str.group(2))
+            otherseed_pt_threshold_2 = convert_to_float(otherseed_pt_str.group(3))
+            otherseed_pt_str = otherseed_pt_str.group(0)
+        else:
+            otherseed_stripped = otherseed
+            otherseed_pt_threshold_1 = None
+            otherseed_pt_threshold_2 = None
+
+        # skip if seeds are different apart from their pT criteria
+        if seed_stripped != otherseed_stripped:
+            return False, None
+
+        seed_types = [type(t) for t in (seed_pt_threshold_1,
+            seed_pt_threshold_2)]
+        otherseed_types = [type(t) for t in (otherseed_pt_threshold_1,
+            otherseed_pt_threshold_2)]
+
+        allowed_types = ([float, None], [float, float])
+
+        if any([types not in allowed_types for types in \
+                (seed_types, otherseed_types)]):
+            return False, None
+
+        if all([types == [float, None] for types in \
+                (seed_types, otherseed_types)]):
+            if seed_pt_threshold_1 > otherseed_pt_threshold_1:
+                is_backup_candidate = True
+
+        if all([types == [float, float] for types in \
+                (seed_types, otherseed_types)]):
+            if seed_pt_threshold_1 >= otherseed_pt_threshold_1 and \
+                    seed_pt_threshold_2 >= otherseed_pt_threshold_2 and \
+                    (seed_pt_threshold_1 > otherseed_pt_threshold_1 or \
+                    seed_pt_threshold_2 > otherseed_pt_threshold_2):
+                is_backup_candidate = True
+
+    # process triple-object seeds
+    elif 'triple' in seed_basename.lower():
+        pattern = r'{}(_*?)(\d+p\d+|\d+)($|(\_(\d+p\d+|\d+)\_(\d+p\d+|\d+)|\_[a-zA-Z]+))'.format(seed_basename)
+
+        seed_pt_str = re.search(pattern, seed)
+        if seed_pt_str:
+            if convert_to_float(seed_pt_str.group(3)) is not None:
+                replace_str = seed_basename + seed_pt_str.group(1) + \
+                        seed_pt_str.group(2) + seed_pt_str.group(3)
+            else:
+                replace_str = seed_basename + seed_pt_str.group(1) + \
+                        seed_pt_str.group(2)
+
+            seed_stripped = seed.replace(replace_str, seed_basename)
+            seed_pt_threshold_1 = convert_to_float(seed_pt_str.group(2))
+            if seed_pt_str.group(5):
+                seed_pt_threshold_2 = convert_to_float(seed_pt_str.group(5))
+            else:
+                seed_pt_threshold_2 = None
+
+            if seed_pt_str.group(6):
+                seed_pt_threshold_3 = convert_to_float(seed_pt_str.group(6))
+            else:
+                seed_pt_threshold_3 = None
+
+            seed_pt_str = seed_pt_str.group(0)
+        else:
+            seed_stripped = seed
+            seed_pt_threshold_1 = None
+            seed_pt_threshold_2 = None
+            seed_pt_threshold_3 = None
+
+        otherseed_pt_str = re.search(pattern, otherseed)
+        if otherseed_pt_str:
+            if convert_to_float(otherseed_pt_str.group(3)) is not None:
+                replace_str = otherseed_basename + otherseed_pt_str.group(1) + \
+                        otherseed_pt_str.group(2) + otherseed_pt_str.group(3)
+            else:
+                replace_str = otherseed_basename + otherseed_pt_str.group(1) + \
+                        otherseed_pt_str.group(2)
+
+            otherseed_stripped = otherseed.replace(replace_str,
+                    otherseed_basename)
+            otherseed_pt_threshold_1 = convert_to_float(otherseed_pt_str.group(2))
+            if otherseed_pt_str.group(5):
+                otherseed_pt_threshold_2 = convert_to_float(otherseed_pt_str.group(5))
+            else:
+                otherseed_pt_threshold_2 = None
+
+            if otherseed_pt_str.group(6):
+                otherseed_pt_threshold_3 = convert_to_float(otherseed_pt_str.group(6))
+            else:
+                otherseed_pt_threshold_3 = None
+
+            otherseed_pt_str = otherseed_pt_str.group(0)
+        else:
+            otherseed_stripped = otherseed
+            otherseed_pt_threshold_1 = None
+            otherseed_pt_threshold_2 = None
+            otherseed_pt_threshold_3 = None
+
+        # skip if seeds are different apart from their pT criteria
+        if seed_stripped != otherseed_stripped:
+            return False, None
+
+        seed_types = [type(t) for t in (seed_pt_threshold_1,
+            seed_pt_threshold_2, seed_pt_threshold_3)]
+        otherseed_types = [type(t) for t in (otherseed_pt_threshold_1,
+            otherseed_pt_threshold_2, otherseed_pt_threshold_3)]
+
+        allowed_types = ([float, type(None), type(None)], [float, float, float])
+
+        if any([types not in allowed_types for types in \
+                (seed_types, otherseed_types)]):
+            return False, None
+
+        if all([types == [float, type(None), type(None)] for types in \
+                (seed_types, otherseed_types)]):
+            if seed_pt_threshold_1 > otherseed_pt_threshold_1:
+                is_backup_candidate = True
+
+        if all([types == [float, float, float] for types in \
+                (seed_types, otherseed_types)]):
+            if seed_pt_threshold_1 >= otherseed_pt_threshold_1 and \
+                    seed_pt_threshold_2 >= otherseed_pt_threshold_2 and \
+                    seed_pt_threshold_3 >= otherseed_pt_threshold_3 and \
+                    (seed_pt_threshold_1 > otherseed_pt_threshold_1 or \
+                    seed_pt_threshold_2 > otherseed_pt_threshold_2 or \
+                    seed_pt_threshold_3 > otherseed_pt_threshold_3):
+                is_backup_candidate = True
+
+    # process quadruple-object seeds
+    elif 'quad' in seed_basename.lower():
+        pattern = r'{}(_*?)(\d+p\d+|\d+)($|(\_(\d+p\d+|\d+)\_(\d+p\d+|\d+)\_(\d+p\d+|\d+)|\_[a-zA-Z]+))'.format(seed_basename)
+
+        seed_pt_str = re.search(pattern, seed)
+        if seed_pt_str:
+            if convert_to_float(seed_pt_str.group(3)) is not None:
+                replace_str = seed_basename + seed_pt_str.group(1) + \
+                        seed_pt_str.group(2) + seed_pt_str.group(3)
+            else:
+                replace_str = seed_basename + seed_pt_str.group(1) + \
+                        seed_pt_str.group(2)
+
+            seed_stripped = seed.replace(replace_str, seed_basename)
+
+            seed_pt_threshold_1 = convert_to_float(seed_pt_str.group(2))
+            if seed_pt_str.group(5):
+                seed_pt_threshold_2 = convert_to_float(seed_pt_str.group(5))
+            else:
+                seed_pt_threshold_2 = None
+
+            if seed_pt_str.group(6):
+                seed_pt_threshold_3 = convert_to_float(seed_pt_str.group(6))
+            else:
+                seed_pt_threshold_3 = None
+
+            if seed_pt_str.group(7):
+                seed_pt_threshold_4 = convert_to_float(seed_pt_str.group(7))
+            else:
+                seed_pt_threshold_4 = None
+
+            seed_pt_str = seed_pt_str.group(0)
+        else:
+            seed_stripped = seed
+            seed_pt_threshold_1 = None
+            seed_pt_threshold_2 = None
+            seed_pt_threshold_3 = None
+            seed_pt_threshold_4 = None
+
+        otherseed_pt_str = re.search(pattern, otherseed)
+        if otherseed_pt_str:
+            if convert_to_float(otherseed_pt_str.group(3)) is not None:
+                replace_str = otherseed_basename + otherseed_pt_str.group(1) + \
+                        otherseed_pt_str.group(2) + otherseed_pt_str.group(3)
+            else:
+                replace_str = otherseed_basename + otherseed_pt_str.group(1) + \
+                        otherseed_pt_str.group(2)
+
+            otherseed_stripped = otherseed.replace(replace_str,
+                    otherseed_basename)
+
+            otherseed_pt_threshold_1 = convert_to_float(otherseed_pt_str.group(2))
+            if otherseed_pt_str.group(5):
+                otherseed_pt_threshold_2 = convert_to_float(otherseed_pt_str.group(5))
+            else:
+                otherseed_pt_threshold_2 = None
+
+            if otherseed_pt_str.group(6):
+                otherseed_pt_threshold_3 = convert_to_float(otherseed_pt_str.group(6))
+            else:
+                otherseed_pt_threshold_3 = None
+
+            if otherseed_pt_str.group(7):
+                otherseed_pt_threshold_4 = convert_to_float(otherseed_pt_str.group(7))
+            else:
+                otherseed_pt_threshold_4 = None
+
+            otherseed_pt_str = otherseed_pt_str.group(0)
+        else:
+            otherseed_stripped = otherseed
+            otherseed_pt_threshold_1 = None
+            otherseed_pt_threshold_2 = None
+            otherseed_pt_threshold_3 = None
+            otherseed_pt_threshold_4 = None
+
+        # skip if seeds are different apart from their pT criteria
+        if seed_stripped != otherseed_stripped:
+            return False, None
+
+        seed_types = [type(t) for t in (seed_pt_threshold_1, seed_pt_threshold_2,
+            seed_pt_threshold_3, seed_pt_threshold_4)]
+        otherseed_types = [type(t) for t in (otherseed_pt_threshold_1,
+            otherseed_pt_threshold_2, otherseed_pt_threshold_3,
+            otherseed_pt_threshold_4)]
+
+        allowed_types = ([float, type(None), type(None), type(None)],
+                [float, float, float, float])
+
+        if any([types not in allowed_types for types in (seed_types, otherseed_types)]):
+            return False, None
+
+        if all([types == [float, type(None), type(None), type(None)] for types \
+                in (seed_types, otherseed_types)]):
+            if seed_pt_threshold_1 > otherseed_pt_threshold_1:
+                is_backup_candidate = True
+
+        if all([types == [float, float, float, float] for types in \
+                (seed_types, otherseed_types)]):
+            if seed_pt_threshold_1 >= otherseed_pt_threshold_1 and \
+                    seed_pt_threshold_2 >= otherseed_pt_threshold_2 and \
+                    seed_pt_threshold_3 >= otherseed_pt_threshold_3 and \
+                    seed_pt_threshold_4 >= otherseed_pt_threshold_4 and \
+                    (seed_pt_threshold_1 > otherseed_pt_threshold_1 or \
+                    seed_pt_threshold_2 > otherseed_pt_threshold_2 or \
+                    seed_pt_threshold_3 > otherseed_pt_threshold_3 or \
+                    seed_pt_threshold_4 > otherseed_pt_threshold_4):
+                is_backup_candidate = True
+
+    return is_backup_candidate, (otherseed if is_backup_candidate else None)
 
 
 def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
