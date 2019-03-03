@@ -1213,11 +1213,24 @@ if __name__ == '__main__':
     parser.add_argument('filename',
             help='Name/path of the PS table file',
             type=str)
+    parser.add_argument('-q', '--quiet',
+            help='Make script less verbose',
+            action='store_true',
+            dest='quietmode')
 
     args = parser.parse_args()
 
-    table = read_table(args.filename)
-    signal_seeds, backup_seeds = separate_signal_and_backup_seeds(table)
+    outfile_signal = 'signal_seeds.csv'
+    outfile_backup = 'backup_seeds.csv'
 
-    signal_seeds.to_csv('signal_seeds.csv')
-    backup_seeds.to_csv('backup_seeds.csv')
+    table = read_table(args.filename)
+    signal_seeds, backup_seeds = separate_signal_and_backup_seeds(table,
+            verbose=(False if args.quietmode else True))
+
+    signal_seeds.to_csv(outfile_signal)
+    if not args.quietmode:
+        print('\nFile created: {} (contains signal seeds)'.format(outfile_signal))
+
+    backup_seeds.to_csv(outfile_backup)
+    if not args.quietmode:
+        print('File created: {} (contains backup seeds)'.format(outfile_backup))
