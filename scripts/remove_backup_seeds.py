@@ -276,7 +276,7 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
     seed_er_str = re.search(pattern, seed)
     if seed_er_str:
         seed_er_str = seed_er_str.group(0)
-        seed_stripped = seed.strip(seed_er_str)
+        seed_stripped = seed.replace(seed_er_str,'')
     else:
         seed_stripped = seed
 
@@ -284,7 +284,7 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
     otherseed_er_str = re.search(pattern, otherseed)
     if otherseed_er_str:
         otherseed_er_str = otherseed_er_str.group(0)
-        otherseed_stripped = otherseed.strip(otherseed_er_str)
+        otherseed_stripped = otherseed.replace(otherseed_er_str,'')
     else:
         otherseed_stripped = otherseed
 
@@ -366,7 +366,7 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
     seed_dRmax_str = re.search(pattern, seed)
     if seed_dRmax_str:
         seed_dRmax_str = seed_dRmax_str.group(0)
-        seed_stripped = seed.strip(seed_dRmax_str)
+        seed_stripped = seed.replace(seed_dRmax_str,'')
     else:
         seed_stripped = seed
 
@@ -374,7 +374,7 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
     otherseed_dRmax_str = re.search(pattern, otherseed)
     if otherseed_dRmax_str:
         otherseed_dRmax_str = otherseed_dRmax_str.group(0)
-        otherseed_stripped = otherseed.strip(otherseed_dRmax_str)
+        otherseed_stripped = otherseed.replace(otherseed_dRmax_str,'')
     else:
         otherseed_stripped = otherseed
 
@@ -456,7 +456,7 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
     seed_dRmin_str = re.search(pattern, seed)
     if seed_dRmin_str:
         seed_dRmin_str = seed_dRmin_str.group(0)
-        seed_stripped = seed.strip(seed_dRmin_str)
+        seed_stripped = seed.replace(seed_dRmin_str,'')
     else:
         seed_stripped = seed
 
@@ -464,7 +464,7 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
     otherseed_dRmin_str = re.search(pattern, otherseed)
     if otherseed_dRmin_str:
         otherseed_dRmin_str = otherseed_dRmin_str.group(0)
-        otherseed_stripped = otherseed.strip(otherseed_dRmin_str)
+        otherseed_stripped = otherseed.replace(otherseed_dRmin_str,'')
     else:
         otherseed_stripped = otherseed
 
@@ -546,7 +546,7 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
     seed_mass_str = re.search(pattern, seed)
     if seed_mass_str:
         seed_mass_str = seed_mass_str.group(0)
-        seed_stripped = seed.strip(seed_mass_str)
+        seed_stripped = seed.replace(seed_mass_str,'')
         if seed_stripped.endswith('_'): seed_stripped = seed_stripped[:-1]
     else:
         seed_stripped = seed
@@ -555,7 +555,7 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
     otherseed_mass_str = re.search(pattern, otherseed)
     if otherseed_mass_str:
         otherseed_mass_str = otherseed_mass_str.group(0)
-        otherseed_stripped = otherseed.strip(otherseed_mass_str)
+        otherseed_stripped = otherseed.replace(otherseed_mass_str,'')
         if otherseed_stripped.endswith('_'): otherseed_stripped = otherseed_stripped[:-1]
     else:
         otherseed_stripped = otherseed
@@ -592,7 +592,7 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
 
 def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
     """
-    Checks whether 'otherseed' has a looser quality criterion than 'seed'.
+    Checks whether 'seed' has a tighter quality criterion than 'otherseed'.
 
     This will only check SingleMu, DoubleMu, TripleMu and QuadMu seeds.
 
