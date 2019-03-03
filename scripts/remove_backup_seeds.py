@@ -195,9 +195,9 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
         # criterion_er,
         # criterion_dRmax,
         # criterion_dRmin,
-        criterion_MassXtoY,
+        # criterion_MassXtoY,
         # criterion_quality,
-        # criterion_isolation,
+        criterion_isolation,
     ]
 
     for otherseed,otherprescale in zip(all_seeds, all_prescales):
@@ -736,7 +736,92 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: 
 
 
 def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
-    raise NotImplementedError
+    """
+    Checks whether 'seed' has a tigher isolation cut than 'otherseed'.
+
+    Isolation criteria, ordered from tightest to loosest: 'Iso' -> 'LooseIso' ->
+    no isolation criterion given.
+
+    If not explicitly specified, no isolation cuts are applied.
+
+    This function does not process any seeds which involve more than one
+    isolation cut (e.g., cross-triggers). Further, if 'seed' and 'otherseed'
+    have any differences apart from their isolation requirements, this function
+    will pass on them as well.
+
+    Parameters
+    ---------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise
+
+    """
+
+    is_backup_candidate = False
+
+    seed_basename = get_seed_basename(seed)
+    otherseed_basename = get_seed_basename(otherseed)
+
+    # skip if different events alltogether
+    if seed_basename != otherseed_basename:
+        return False, None
+
+    # do not process further if there are multiple isolation criteria in a seed
+    pattern = r'Iso|LooseIso'
+    if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
+        return False, None
+
+    # do not process further if neither seed has an isolation restriction
+    if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
+        return False, None
+
+    # extract the isolation substring from 'seed'
+    seed_iso_str = re.search(pattern, seed)
+    if seed_iso_str:
+        seed_iso_str = seed_iso_str.group(0)
+        seed_stripped = seed.replace(seed_iso_str,'')
+        if seed_stripped.endswith('_'): seed_stripped = seed_stripped[:-1]
+
+    else:
+        seed_stripped = seed
+
+    # extract the iso restriction substring from 'otherseed'
+    otherseed_iso_str = re.search(pattern, otherseed)
+    if otherseed_iso_str:
+        otherseed_iso_str = otherseed_iso_str.group(0)
+        otherseed_stripped = otherseed.replace(otherseed_iso_str,'')
+        if otherseed_stripped.endswith('_'): otherseed_stripped = otherseed_stripped[:-1]
+
+    else:
+        otherseed_stripped = otherseed
+
+    # do not process further if the seeds are different (apart from their
+    # isolation criteria)
+    if seed_stripped != otherseed_stripped:
+        return False, None
+
+    if seed_iso_str == 'Iso' and otherseed_iso_str == 'LooseIso':
+        is_backup_candidate = True
+
+    if seed_iso_str == 'Iso' and otherseed_iso_str is None:
+        is_backup_candidate = True
+
+    if seed_iso_str == 'LooseIso' and otherseed_iso_str is None:
+        is_backup_candidate = True
+
+    return is_backup_candidate, (otherseed if is_backup_candidate else None)
 
 
 if __name__ == '__main__':
