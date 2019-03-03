@@ -4,6 +4,7 @@ import argparse
 import csv
 import re
 import pandas as pd
+from tabulate import tabulate
 
 
 def read_table(filepath: str) -> pd.DataFrame:
@@ -165,9 +166,14 @@ def convert_to_float(val: str) -> Union[float,None]:
 
 
 
-def separate_signal_and_backup_seeds(table: pd.DataFrame) -> (pd.DataFrame,
+def separate_signal_and_backup_seeds(table: pd.DataFrame, verbose=True) -> (pd.DataFrame,
         pd.DataFrame):
     # TODO add docstring
+
+    signal_seeds = pd.DataFrame(columns=table.columns)
+    backup_seeds = pd.DataFrame(columns=table.columns)
+
+    backup_seeds_info = []
 
     name_col_idx = get_name_col_idx(table)
     PS_col_idx = get_PS_col_idx(table)
@@ -176,52 +182,60 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame) -> (pd.DataFrame,
         seed = row[name_col_idx]
         prescale = row[PS_col_idx]
 
-        is_backup_seed, signal_seed = has_signal_seed(seed, prescale,
+        is_backup_seed, identified_signal_seeds, criteria = has_signal_seed(seed, prescale,
                 table.iloc[:,name_col_idx].tolist(), table.iloc[:,PS_col_idx].tolist())
 
-        # if is_backup_seed:
-        #     # add this backup seed to backup seed collection
-        #     # remove this backup seed
-        
-        # else:
-        #     # add this seed to signal seed collection
+        if is_backup_seed:
+            backup_seeds = backup_seeds.append(table.iloc[idx,:])
+            backup_seeds_info.append([seed, ', '.join(identified_signal_seeds),
+                ', '.join(criteria)])
+
+        else:
+            signal_seeds = signal_seeds.append(table.iloc[idx,:])
+
+    if verbose:
+        print(tabulate(backup_seeds_info, headers=['Identified backup seed',
+            'corresponding signal seeds',
+            'used criteria (in signal seed order)']))
+
+    return signal_seeds, backup_seeds
 
 
 def has_signal_seed(seed: str, prescale: int, all_seeds: list,
-        all_prescales: list) -> (bool, str):
+        all_prescales: list) -> (bool, list, list):
     # TODO add docstring
 
     # collection of functions that define backup-seed criteria
     criterion_functions = [
-        # criterion_prescale,
+        criterion_prescale,
         criterion_pT,
-        # criterion_er,
-        # criterion_dRmax,
-        # criterion_dRmin,
-        # criterion_MassXtoY,
-        # criterion_quality,
-        # criterion_isolation,
+        criterion_er,
+        criterion_dRmax,
+        criterion_dRmin,
+        criterion_MassXtoY,
+        criterion_quality,
+        criterion_isolation,
     ]
+
+    is_backup_seed = False
+    identified_signal_seeds = []
+    criteria = []
 
     for otherseed,otherprescale in zip(all_seeds, all_prescales):
         for criterion in criterion_functions:
             if not all([type(s) == str for s in (seed,otherseed)]): continue
-            is_backup_seed, identified_signal_seed = criterion(seed, prescale,
-                    otherseed, otherprescale)
+            is_backup_candidate, identified_signal_seed, identified_criterion = criterion(
+                    seed, prescale, otherseed, otherprescale)
 
-            if is_backup_seed:
-                print('+++ backup: {} (PS: {});    signal: {} (PS: {})'.format(seed,prescale,otherseed,otherprescale))
-                pass
-            else:
-                # print('--- backup: {};    signal: {}'.format(otherseed,seed))
-                pass
+            if is_backup_candidate:
+                is_backup_seed = True
+                identified_signal_seeds.append(identified_signal_seed)
+                criteria.append(identified_criterion)
 
-            # TODO assign seed depending on whether it is a backup seed
-
-    return True, 'false' # TODO correct this
+    return is_backup_seed, identified_signal_seeds, criteria
 
 
-def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
+def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher pT cut than 'otherseed'.
 
@@ -260,10 +274,11 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
     Returns
     -------
-    (bool, str)
+    (bool, str, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
         the name of the other seed if 'otherseed' is a signal seed to 'seed' or
-        None otherwise
+        None otherwise, name of the criterion (None if 'seed' is not a backup
+        seed)
 
     """
 
@@ -274,9 +289,9 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
     # skip if different seeds altogether
     if seed_basename != otherseed_basename:
-        return False, None
+        return False, None, None
     elif seed_basename is None or otherseed_basename is None:
-        return False, None
+        return False, None, None
 
     # distinguish between single, double, triple and quadruple seed objects
 
@@ -308,7 +323,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
         # skip if seeds are different apart from their pT criterion
         if seed_stripped != otherseed_stripped:
-            return False, None
+            return False, None, None
 
         if seed_pt_threshold is not None and otherseed_pt_threshold is not None \
                 and seed_pt_threshold > otherseed_pt_threshold:
@@ -346,7 +361,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
         # skip if seeds are different apart from their pT criteria
         if seed_stripped != otherseed_stripped:
-            return False, None
+            return False, None, None
 
         seed_types = [type(t) for t in (seed_pt_threshold_1,
             seed_pt_threshold_2)]
@@ -357,7 +372,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
         if any([types not in allowed_types for types in \
                 (seed_types, otherseed_types)]):
-            return False, None
+            return False, None, None
 
         if all([types == [float, None] for types in \
                 (seed_types, otherseed_types)]):
@@ -435,7 +450,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
         # skip if seeds are different apart from their pT criteria
         if seed_stripped != otherseed_stripped:
-            return False, None
+            return False, None, None
 
         seed_types = [type(t) for t in (seed_pt_threshold_1,
             seed_pt_threshold_2, seed_pt_threshold_3)]
@@ -446,7 +461,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
         if any([types not in allowed_types for types in \
                 (seed_types, otherseed_types)]):
-            return False, None
+            return False, None, None
 
         if all([types == [float, type(None), type(None)] for types in \
                 (seed_types, otherseed_types)]):
@@ -540,7 +555,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
         # skip if seeds are different apart from their pT criteria
         if seed_stripped != otherseed_stripped:
-            return False, None
+            return False, None, None
 
         seed_types = [type(t) for t in (seed_pt_threshold_1, seed_pt_threshold_2,
             seed_pt_threshold_3, seed_pt_threshold_4)]
@@ -552,7 +567,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
                 [float, float, float, float])
 
         if any([types not in allowed_types for types in (seed_types, otherseed_types)]):
-            return False, None
+            return False, None, None
 
         if all([types == [float, type(None), type(None), type(None)] for types \
                 in (seed_types, otherseed_types)]):
@@ -571,10 +586,11 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int) -
                     seed_pt_threshold_4 > otherseed_pt_threshold_4):
                 is_backup_candidate = True
 
-    return is_backup_candidate, (otherseed if is_backup_candidate else None)
+    return is_backup_candidate, (otherseed if is_backup_candidate else None), \
+            ('pT' if is_backup_candidate else None)
 
 
-def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
+def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher eta restriction cut than 'otherseed'.
 
@@ -602,7 +618,8 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
         the name of the other seed if 'otherseed' is a signal seed to 'seed' or
-        None otherwise
+        None otherwise, name of the criterion function (None if 'seed' is not a
+        backup seed)
 
     """
 
@@ -613,16 +630,16 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
     # skip if different seeds altogether
     if seed_basename != otherseed_basename:
-        return False, None
+        return False, None, None
 
     # do not process further if there are multiple eta restrictions in a seed
     pattern = r'er(\d+)p(\d+)|er(\d+)'
     if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # do not process further if neither seed has an eta restriction
     if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # extract the eta restriction substring for 'seed'
     seed_er_str = re.search(pattern, seed)
@@ -642,7 +659,7 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
 
     # do not process further if the seeds are different (apart from their ER)
     if seed_stripped != otherseed_stripped:
-        return False, None
+        return False, None, None
 
     if seed_er_str is not None:
         seed_er_val = convert_to_float(seed_er_str.replace('er',''))
@@ -662,10 +679,11 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int) -
             seed_er_val > 0.0:
         is_backup_candidate = True
 
-    return is_backup_candidate, (otherseed if is_backup_candidate else None)
+    return is_backup_candidate, (otherseed if is_backup_candidate else None), \
+            ('eta restriction' if is_backup_candidate else None)
 
 
-def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
+def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher dRmax restriction cut than 'otherseed'.
 
@@ -692,7 +710,8 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
         the name of the other seed if 'otherseed' is a signal seed to 'seed' or
-        None otherwise
+        None otherwise, name of the criterion (None if 'seed' is not a backup
+        seed)
 
     """
 
@@ -703,16 +722,16 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
 
     # skip if different seeds altogether
     if seed_basename != otherseed_basename:
-        return False, None
+        return False, None, None
 
     # do not process further if there are multiple dRmax restrictions
     pattern = r'dR_Max(\d+)p(\d+)|dR_Max(\d+)'
     if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # do not process further if neither seed has a dRmax restriction
     if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # extract the dRmax restriction substring for 'seed'
     seed_dRmax_str = re.search(pattern, seed)
@@ -732,7 +751,7 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
 
     # do not process further if the seeds are different (apart from their dRmax)
     if seed_stripped != otherseed_stripped:
-        return False, None
+        return False, None, None
 
     if seed_dRmax_str is not None:
         seed_dRmax_val = convert_to_float(seed_dRmax_str.replace('dR_Max',''))
@@ -752,10 +771,11 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str, otherprescale: int
             seed_dRmax_val > 0.0:
         is_backup_candidate = True
 
-    return is_backup_candidate, (otherseed if is_backup_candidate else None)
+    return is_backup_candidate, (otherseed if is_backup_candidate else None), \
+            ('dR_Max' if is_backup_candidate else None)
 
 
-def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
+def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher dRmin restriction cut than 'otherseed'.
 
@@ -782,7 +802,8 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
         the name of the other seed if 'otherseed' is a signal seed to 'seed' or
-        None otherwise
+        None otherwise, the name of the criterion (None if 'seed' is not a
+        backup seed)
 
     """
 
@@ -793,16 +814,16 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
 
     # skip if different seeds altogether
     if seed_basename != otherseed_basename:
-        return False, None
+        return False, None, None
 
     # do not process further if there are multiple dRmin restrictions
     pattern = r'dR_Min(\d+)p(\d+)|dR_Min(\d+)'
     if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # do not process further if neither seed has a dRmin restriction
     if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # extract the dRmin restriction substring for 'seed'
     seed_dRmin_str = re.search(pattern, seed)
@@ -822,7 +843,7 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
 
     # do not process further if the seeds are different (apart from their dRmin)
     if seed_stripped != otherseed_stripped:
-        return False, None
+        return False, None, None
 
     if seed_dRmin_str is not None:
         seed_dRmin_val = convert_to_float(seed_dRmin_str.replace('dR_Min',''))
@@ -842,10 +863,11 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str, otherprescale: int
             seed_dRmin_val > 0.0:
         is_backup_candidate = True
 
-    return is_backup_candidate, (otherseed if is_backup_candidate else None)
+    return is_backup_candidate, (otherseed if is_backup_candidate else None), \
+            ('dR_Min' if is_backup_candidate else None)
 
 
-def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
+def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher mass cut than 'otherseed'.
 
@@ -872,7 +894,8 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
         the name of the other seed if 'otherseed' is a signal seed to 'seed' or
-        None otherwise
+        None otherwise, name of the criterion (None if 'seed' is not a backup
+        seed)
 
     """
 
@@ -883,16 +906,16 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
 
     # skip if different seeds altogether
     if seed_basename != otherseed_basename:
-        return False, None
+        return False, None, None
 
     # do not process further if there are multiple mass restrictions in a seed
     pattern = r'Mass(_*?)(\d+p\d+|\d+)to(\d+p\d+|\d+)'
     if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # do not process further if neither seed has an mass restriction
     if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # extract the mass restriction substring for 'seed'
     seed_mass_str = re.search(pattern, seed)
@@ -914,7 +937,7 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
 
     # do not process further if the seeds are different (apart from their mass cuts)
     if seed_stripped != otherseed_stripped:
-        return False, None
+        return False, None, None
 
     if seed_mass_str is not None:
         search_res = re.search('\d', seed_mass_str)
@@ -939,10 +962,11 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str, otherprescale: 
     if seed_mass_range is not None and otherseed_mass_range is None:
         is_backup_candidate = True
 
-    return is_backup_candidate, (otherseed if is_backup_candidate else None)
+    return is_backup_candidate, (otherseed if is_backup_candidate else None), \
+            ('MassXtoY' if is_backup_candidate else None)
 
 
-def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
+def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
     """
     Checks whether 'seed' has a tighter quality criterion than 'otherseed'.
 
@@ -973,7 +997,8 @@ def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: i
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
         the name of the other seed if 'otherseed' is a signal seed to 'seed' or
-        None otherwise
+        None otherwise, the name of the criterion (None if 'seed' is not a
+        backup seed)
 
     """
 
@@ -984,14 +1009,14 @@ def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: i
     seed_basename = get_seed_basename(seed)
 
     if seed_basename is None:
-        return False, None
+        return False, None, None
 
     if not any([muontype in seed_basename.lower() for muontype in ('singlemu',
             'doublemu', 'triplemu', 'quadmu')]):
-        return False, None
+        return False, None, None
 
     if not otherseed.startswith(seed_basename):
-        return False, None
+        return False, None, None
 
     do_further_checks = False
 
@@ -1048,10 +1073,11 @@ def criterion_quality(seed: str, prescale: int, otherseed: str, otherprescale: i
 
     identified_signal_seed = otherseed if is_backup_candidate else None
 
-    return is_backup_candidate, identified_signal_seed
+    return is_backup_candidate, identified_signal_seed, \
+            ('muon quality' if is_backup_candidate else None)
 
 
-def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
+def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
     """
     Checks whether 'seed' has a higher prescale value than 'otherseed'.
 
@@ -1074,7 +1100,8 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: 
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
         the name of the other seed if 'otherseed' is a signal seed to 'seed' or
-        None otherwise
+        None otherwise, the name of the criterion (None if 'seed' is not a
+        backup seed)
 
     """
 
@@ -1084,10 +1111,11 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str, otherprescale: 
         is_backup_candidate = True
         identified_signal_seed = otherseed
 
-    return is_backup_candidate, identified_signal_seed
+    return is_backup_candidate, identified_signal_seed, \
+            ('prescale' if is_backup_candidate else None)
 
 
-def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str):
+def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale: int) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher isolation cut than 'otherseed'.
 
@@ -1117,7 +1145,8 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale:
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
         the name of the other seed if 'otherseed' is a signal seed to 'seed' or
-        None otherwise
+        None otherwise, the name of the criterion (None if 'seed' is not a
+        backup seed)
 
     """
 
@@ -1128,16 +1157,16 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale:
 
     # skip if different events alltogether
     if seed_basename != otherseed_basename:
-        return False, None
+        return False, None, None
 
     # do not process further if there are multiple isolation criteria in a seed
     pattern = r'Iso|LooseIso'
     if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # do not process further if neither seed has an isolation restriction
     if all([len(re.findall(pattern, s)) == 0 for s in (seed, otherseed)]):
-        return False, None
+        return False, None, None
 
     # extract the isolation substring from 'seed'
     seed_iso_str = re.search(pattern, seed)
@@ -1162,7 +1191,7 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale:
     # do not process further if the seeds are different (apart from their
     # isolation criteria)
     if seed_stripped != otherseed_stripped:
-        return False, None
+        return False, None, None
 
     if seed_iso_str == 'Iso' and otherseed_iso_str == 'LooseIso':
         is_backup_candidate = True
@@ -1173,7 +1202,8 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str, otherprescale:
     if seed_iso_str == 'LooseIso' and otherseed_iso_str is None:
         is_backup_candidate = True
 
-    return is_backup_candidate, (otherseed if is_backup_candidate else None)
+    return is_backup_candidate, (otherseed if is_backup_candidate else None), \
+            ('isolation' if is_backup_candidate else None)
 
 
 if __name__ == '__main__':
@@ -1187,4 +1217,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     table = read_table(args.filename)
-    separate_signal_and_backup_seeds(table)
+    signal_seeds, backup_seeds = separate_signal_and_backup_seeds(table)
+
+    signal_seeds.to_csv('signal_seeds.csv')
+    backup_seeds.to_csv('backup_seeds.csv')
