@@ -1,6 +1,6 @@
 # Demo: `remove_backup_seeds.py`
 
-Used menu rate table: [menu_v2_1_0_rate.csv](../tests/data/menu_v2_1_0_rate.csv)
+Used menu rate table: [menu_v2_1_0_rate.csv](/tests/data/menu_v2_1_0_rate.csv)
 
 Run the following command in order to produce a first set of rate tables.
 ```
