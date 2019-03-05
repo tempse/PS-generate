@@ -371,9 +371,16 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
         search_res = re.search(pattern, seed)
         if search_res:
             substr_stripped = search_res.group(1)
-            substr_stripped += ''.join([search_res.group(i).replace(
-                search_res.group(j),'',1) if search_res.group(i) else '' for \
-                        i,j in [(2,3),(5,6)]])
+            temp_str = search_res.group(2).replace(
+                    search_res.group(3), '', 1) if search_res.group(2) else ''
+            if temp_str.startswith('_'):
+                temp_str = temp_str[1:]
+
+            substr_stripped += temp_str
+            if search_res.group(5):
+                temp_str = search_res.group(5).replace(search_res.group(6),'',1)
+                substr_stripped += temp_str
+
             seed_stripped = seed.replace(search_res.group(0), substr_stripped)
             seed_pt_threshold_1 = convert_to_float(search_res.group(3))
             seed_pt_threshold_2 = convert_to_float(search_res.group(6))
@@ -386,9 +393,16 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
         search_res = re.search(pattern, otherseed)
         if search_res:
             substr_stripped = search_res.group(1)
-            substr_stripped += ''.join([search_res.group(i).replace(
-                search_res.group(j),'',1) if search_res.group(i) else '' for \
-                        i,j in [(2,3),(5,6)]])
+            temp_str = search_res.group(2).replace(
+                    search_res.group(3),'',1) if search_res.group(2) else ''
+            if temp_str.startswith('_'):
+                temp_str = temp_str[1:]
+
+            substr_stripped += temp_str
+            if search_res.group(5):
+                temp_str = search_res.group(5).replace(search_res.group(6),'',1)
+                substr_stripped += temp_str
+
             otherseed_stripped = otherseed.replace(search_res.group(0),
                     substr_stripped)
             otherseed_pt_threshold_1 = convert_to_float(search_res.group(3))
@@ -436,9 +450,17 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
         search_res = re.search(pattern, seed)
         if search_res:
             substr_stripped = search_res.group(1)
-            substr_stripped += ''.join([search_res.group(i).replace(
-                search_res.group(j),'',1) if search_res.group(i) else '' for \
-                        i,j in [(2,3),(5,6),(5,8)]])
+            temp_str = search_res.group(2).replace(
+                    search_res.group(3), '', 1) if search_res.group(2) else ''
+            if temp_str.startswith('_'):
+                temp_str = temp_str[1:]
+
+            substr_stripped += temp_str
+            if search_res.group(5):
+                temp_str = search_res.group(5).replace(search_res.group(6),'',1)
+                temp_str = temp_str.replace(search_res.group(8), '', 1)
+                substr_stripped += temp_str
+
             seed_stripped = seed.replace(search_res.group(0), substr_stripped)
             seed_pt_threshold_1 = convert_to_float(search_res.group(3))
             seed_pt_threshold_2 = convert_to_float(search_res.group(6))
@@ -453,9 +475,17 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
         search_res = re.search(pattern, otherseed)
         if search_res:
             substr_stripped = search_res.group(1)
-            substr_stripped += ''.join([search_res.group(i).replace(
-                search_res.group(j),'',1) if search_res.group(i) else '' for \
-                        i,j in [(2,3),(5,6),(5,8)]])
+            temp_str = search_res.group(2).replace(
+                    search_res.group(3),'',1) if search_res.group(2) else ''
+            if temp_str.startswith('_'):
+                temp_str = temp_str[1:]
+
+            substr_stripped += temp_str
+            if search_res.group(5):
+                temp_str = search_res.group(5).replace(search_res.group(6),'',1)
+                temp_str = temp_str.replace(search_res.group(8), '', 1)
+                substr_stripped += temp_str
+
             otherseed_stripped = otherseed.replace(search_res.group(0),
                     substr_stripped)
             otherseed_pt_threshold_1 = convert_to_float(search_res.group(3))
@@ -535,9 +565,18 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
         search_res = re.search(pattern, seed)
         if search_res:
             substr_stripped = search_res.group(1)
-            substr_stripped += ''.join([search_res.group(i).replace(
-                search_res.group(j),'',1) if search_res.group(i) else '' for \
-                        i,j in [(2,3),(5,6),(5,8),(5,10)]])
+            temp_str = search_res.group(2).replace(
+                    search_res.group(3), '', 1) if search_res.group(2) else ''
+            if temp_str.startswith('_'):
+                temp_str = temp_str[1:]
+
+            substr_stripped += temp_str
+            if search_res.group(5):
+                temp_str = search_res.group(5).replace(search_res.group(6),'',1)
+                temp_str = temp_str.replace(search_res.group(8), '', 1)
+                temp_str = temp_str.replace(search_res.group(10), '', 1)
+                substr_stripped += temp_str
+
             seed_stripped = seed.replace(search_res.group(0), substr_stripped)
             seed_pt_threshold_1 = convert_to_float(search_res.group(3))
             seed_pt_threshold_2 = convert_to_float(search_res.group(6))
@@ -554,9 +593,18 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
         search_res = re.search(pattern, otherseed)
         if search_res:
             substr_stripped = search_res.group(1)
-            substr_stripped += ''.join([search_res.group(i).replace(
-                search_res.group(j),'',1) if search_res.group(i) else '' for \
-                        i,j in [(2,3),(5,6),(5,8),(5,10)]])
+            temp_str = search_res.group(2).replace(
+                    search_res.group(3),'',1) if search_res.group(2) else ''
+            if temp_str.startswith('_'):
+                temp_str = temp_str[1:]
+
+            substr_stripped += temp_str
+            if search_res.group(5):
+                temp_str = search_res.group(5).replace(search_res.group(6),'',1)
+                temp_str = temp_str.replace(search_res.group(8), '', 1)
+                temp_str = temp_str.replace(search_res.group(10), '', 1)
+                substr_stripped += temp_str
+
             otherseed_stripped = otherseed.replace(search_res.group(0),
                     substr_stripped)
             otherseed_pt_threshold_1 = convert_to_float(search_res.group(3))
