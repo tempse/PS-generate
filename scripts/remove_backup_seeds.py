@@ -167,7 +167,8 @@ def convert_to_float(val: str) -> Union[float,None]:
 
 
 def separate_signal_and_backup_seeds(table: pd.DataFrame,
-        keep_zero_prescales=False, verbose=True) -> (pd.DataFrame,
+        check_prescales=True, keep_zero_prescales=False,
+        verbose=True) -> (pd.DataFrame,
                 pd.DataFrame):
     # TODO add docstring
 
@@ -189,6 +190,7 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
         is_backup_seed, identified_signal_seeds, criteria = has_signal_seed(
                 seed, prescale, table.iloc[:,name_col_idx].tolist(),
                 table.iloc[:,PS_col_idx].tolist(),
+                check_prescales=check_prescales,
                 keep_zero_prescales=keep_zero_prescales)
 
         signal_seeds_prescales = [(table[table.iloc[:,name_col_idx]==s].iloc[:,
@@ -225,20 +227,22 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
 
 
 def has_signal_seed(seed: str, prescale: int, all_seeds: list,
-        all_prescales: list, keep_zero_prescales : bool = False) -> (bool,
+        all_prescales: list, check_prescales : bool = True,
+        keep_zero_prescales : bool = False) -> (bool,
                 list, list):
     # TODO add docstring
 
-    # collection of functions that define backup-seed criteria
+    # collection of functions that define backup-seed criteria, together with
+    # an option string
     criterion_functions = [
-        criterion_prescale,
-        criterion_pT,
-        criterion_er,
-        criterion_dRmax,
-        criterion_dRmin,
-        criterion_MassXtoY,
-        criterion_quality,
-        criterion_isolation,
+        (criterion_prescale,  ''),
+        (criterion_pT,        ''),
+        (criterion_er,        ''),
+        (criterion_dRmax,     ''),
+        (criterion_dRmin,     ''),
+        (criterion_MassXtoY,  ''),
+        (criterion_quality,   ''),
+        (criterion_isolation, ''),
     ]
 
     is_backup_seed = False
@@ -246,11 +250,13 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
     criteria = []
 
     for otherseed,otherprescale in zip(all_seeds, all_prescales):
-        for criterion in criterion_functions:
+        for (criterion,options) in criterion_functions:
             if not all([type(s) == str for s in (seed,otherseed)]): continue
             is_backup_candidate, identified_signal_seed, identified_criterion = criterion(
                     seed, prescale, otherseed, otherprescale,
-                    ignore_prescale=(True if keep_zero_prescales else False))
+                    lazy=(True if 'lazy' in options else False),
+                    check_prescales=(True if check_prescales else False),
+                    ignore_zero_prescales=(True if keep_zero_prescales else False))
 
             if is_backup_candidate:
                 is_backup_seed = True
@@ -261,7 +267,8 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
 
 
 def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
-        ignore_prescale : bool = False) -> (bool, str, str):
+        ignore_zero_prescales : bool = False, check_prescales : bool = True,
+        lazy : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher pT cut than 'otherseed'.
 
@@ -300,8 +307,14 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
 
     Optional parameters
     -------------------
-    ignore_prescale : bool
+    ignore_zero_prescales : bool
         Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        If True, do not consider seeds which differ from 'seed' in more aspects
+        than the current criterion (default: False)
 
     Returns
     -------
@@ -313,10 +326,10 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
 
     """
 
-    if not ignore_prescale and prescale < otherprescale:
+    if check_prescales and prescale < otherprescale:
         return False, None, None
 
-    if not ignore_prescale and otherprescale == 0:
+    if not ignore_zero_prescales and otherprescale == 0:
         return False, None, None
 
     is_backup_candidate = False
@@ -355,7 +368,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
             otherseed_pt_threshold = None
 
         # skip if seeds are different apart from their pT criterion
-        if seed_stripped != otherseed_stripped:
+        if not lazy and seed_stripped != otherseed_stripped:
             return False, None, None
 
         if seed_pt_threshold is not None and otherseed_pt_threshold is not None \
@@ -414,7 +427,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
             otherseed_pt_threshold_2 = None
 
         # skip if seeds are different apart from their pT criteria
-        if seed_stripped != otherseed_stripped:
+        if not lazy and seed_stripped != otherseed_stripped:
             return False, None, None
 
         seed_types = [type(t) for t in (seed_pt_threshold_1,
@@ -527,7 +540,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
                 is_backup_candidate = True
 
         # skip if seeds are different apart from their pT criteria
-        if seed_stripped != otherseed_stripped:
+        if not lazy and seed_stripped != otherseed_stripped:
             return False, None, None
 
         seed_types = [type(t) for t in (seed_pt_threshold_1,
@@ -620,7 +633,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
             otherseed_pt_threshold_4 = None
 
         # skip if seeds are different apart from their pT criteria
-        if seed_stripped != otherseed_stripped:
+        if not lazy and seed_stripped != otherseed_stripped:
             return False, None, None
 
         seed_types = [type(t) for t in (seed_pt_threshold_1, seed_pt_threshold_2,
@@ -657,7 +670,8 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
 
 
 def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
-        ignore_prescale : bool = False) -> (bool, str, str):
+        ignore_zero_prescales : bool = False, check_prescales : bool = True,
+        lazy : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher eta restriction cut than 'otherseed'.
 
@@ -682,8 +696,14 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
 
     Optional parameters
     -------------------
-    ignore_prescale : bool
+    ignore_zero_prescales : bool
         Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        If True, do not consider seeds which differ from 'seed' in more aspects
+        than the current criterion (default: False)
 
     Returns
     -------
@@ -695,10 +715,10 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
 
     """
 
-    if not ignore_prescale and prescale < otherprescale:
+    if check_prescales and prescale < otherprescale:
         return False, None, None
 
-    if not ignore_prescale and otherprescale == 0:
+    if not ignore_zero_prescales and otherprescale == 0:
         return False, None, None
 
     is_backup_candidate = False
@@ -736,7 +756,7 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
         otherseed_stripped = otherseed
 
     # do not process further if the seeds are different (apart from their ER)
-    if seed_stripped != otherseed_stripped:
+    if not lazy and seed_stripped != otherseed_stripped:
         return False, None, None
 
     if seed_er_str is not None:
@@ -762,7 +782,8 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
 
 
 def criterion_dRmax(seed: str, prescale: int, otherseed: str,
-        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
+        otherprescale: int, ignore_zero_prescales : bool = False,
+        check_prescales : bool = True, lazy : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher dRmax restriction cut than 'otherseed'.
 
@@ -786,8 +807,14 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str,
 
     Optional parameters
     -------------------
-    ignore_prescale : bool
+    ignore_zero_prescales : bool
         Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        If True, do not consider seeds which differ from 'seed' in more aspects
+        than the current criterion (default: False)
 
     Returns
     -------
@@ -799,10 +826,10 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str,
 
     """
 
-    if not ignore_prescale and prescale < otherprescale:
+    if check_prescales and prescale < otherprescale:
         return False, None, None
 
-    if not ignore_prescale and otherprescale == 0:
+    if not ignore_zero_prescales and otherprescale == 0:
         return False, None, None
 
     is_backup_candidate = False
@@ -840,7 +867,7 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str,
         otherseed_stripped = otherseed
 
     # do not process further if the seeds are different (apart from their dRmax)
-    if seed_stripped != otherseed_stripped:
+    if not lazy and seed_stripped != otherseed_stripped:
         return False, None, None
 
     if seed_dRmax_str is not None:
@@ -866,7 +893,8 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str,
 
 
 def criterion_dRmin(seed: str, prescale: int, otherseed: str,
-        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
+        otherprescale: int, ignore_zero_prescales : bool = False,
+        check_prescales : bool = True, lazy : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher dRmin restriction cut than 'otherseed'.
 
@@ -890,8 +918,14 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str,
 
     Optional parameters
     -------------------
-    ignore_prescale : bool
+    ignore_zero_prescales : bool
         Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        If True, do not consider seeds which differ from 'seed' in more aspects
+        than the current criterion (default: False)
 
     Returns
     -------
@@ -903,10 +937,10 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str,
 
     """
 
-    if not ignore_prescale and prescale < otherprescale:
+    if check_prescales and prescale < otherprescale:
         return False, None, None
 
-    if not ignore_prescale and otherprescale == 0:
+    if not ignore_zero_prescales and otherprescale == 0:
         return False, None, None
 
     is_backup_candidate = False
@@ -944,7 +978,7 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str,
         otherseed_stripped = otherseed
 
     # do not process further if the seeds are different (apart from their dRmin)
-    if seed_stripped != otherseed_stripped:
+    if not lazy and seed_stripped != otherseed_stripped:
         return False, None, None
 
     if seed_dRmin_str is not None:
@@ -970,7 +1004,8 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str,
 
 
 def criterion_MassXtoY(seed: str, prescale: int, otherseed: str,
-        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
+        otherprescale: int, ignore_zero_prescales : bool = False,
+        check_prescales : bool = True, lazy : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher mass cut than 'otherseed'.
 
@@ -994,8 +1029,14 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str,
 
     Optional parameters
     -------------------
-    ignore_prescale : bool
+    ignore_zero_prescales : bool
         Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        If True, do not consider seeds which differ from 'seed' in more aspects
+        than the current criterion (default: False)
 
     Returns
     -------
@@ -1007,10 +1048,10 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str,
 
     """
 
-    if not ignore_prescale and prescale < otherprescale:
+    if check_prescales and prescale < otherprescale:
         return False, None, None
 
-    if not ignore_prescale and otherprescale == 0:
+    if not ignore_zero_prescales and otherprescale == 0:
         return False, None, None
 
     is_backup_candidate = False
@@ -1050,7 +1091,7 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str,
         otherseed_stripped = otherseed
 
     # do not process further if the seeds are different (apart from their mass cuts)
-    if seed_stripped != otherseed_stripped:
+    if not lazy and seed_stripped != otherseed_stripped:
         return False, None, None
 
     if seed_mass_str is not None:
@@ -1081,7 +1122,8 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str,
 
 
 def criterion_quality(seed: str, prescale: int, otherseed: str,
-        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
+        otherprescale: int, ignore_zero_prescales : bool = False,
+        check_prescales : bool = True, lazy : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tighter quality criterion than 'otherseed'.
 
@@ -1109,8 +1151,14 @@ def criterion_quality(seed: str, prescale: int, otherseed: str,
 
     Optional parameters
     -------------------
-    ignore_prescale : bool
+    ignore_zero_prescales : bool
         Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        If True, do not consider seeds which differ from 'seed' in more aspects
+        than the current criterion (default: False)
 
     Returns
     -------
@@ -1122,10 +1170,10 @@ def criterion_quality(seed: str, prescale: int, otherseed: str,
 
     """
 
-    if not ignore_prescale and prescale < otherprescale:
+    if check_prescales and prescale < otherprescale:
         return False, None, None
 
-    if not ignore_prescale and otherprescale == 0:
+    if not ignore_zero_prescales and otherprescale == 0:
         return False, None, None
 
     is_backup_candidate = False
@@ -1185,7 +1233,7 @@ def criterion_quality(seed: str, prescale: int, otherseed: str,
         if is_DQ_seed and '_OQ' in otherseed:
             do_further_checks = True
 
-    if do_further_checks:
+    if not lazy and do_further_checks:
         # require exact matches for the rest of the seed names
         seed_stripped = seed
         otherseed_stripped = otherseed
@@ -1196,7 +1244,6 @@ def criterion_quality(seed: str, prescale: int, otherseed: str,
         if seed_stripped == otherseed_stripped:
             is_backup_candidate = True
 
-
     identified_signal_seed = otherseed if is_backup_candidate else None
 
     return is_backup_candidate, identified_signal_seed, \
@@ -1204,7 +1251,8 @@ def criterion_quality(seed: str, prescale: int, otherseed: str,
 
 
 def criterion_prescale(seed: str, prescale: int, otherseed: str,
-        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
+        otherprescale: int, ignore_zero_prescales : bool = False,
+        check_prescales : bool = True, lazy : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a higher prescale value than 'otherseed'.
 
@@ -1224,8 +1272,14 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str,
 
     Optional parameters
     -------------------
-    ignore_prescale : bool
+    ignore_zero_prescales : bool
         Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        This parameter has no function in this case, but exists only for
+        reasons of compatibility.
 
     Returns
     -------
@@ -1237,10 +1291,10 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str,
 
     """
 
-    if not ignore_prescale and prescale < otherprescale:
+    if check_prescales and prescale < otherprescale:
         return False, None, None
 
-    if not ignore_prescale and otherprescale == 0:
+    if not ignore_zero_prescales and otherprescale == 0:
         return False, None, None
 
     is_backup_candidate = False
@@ -1254,7 +1308,8 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str,
 
 
 def criterion_isolation(seed: str, prescale: int, otherseed: str,
-        otherprescale: int, ignore_prescale : bool = False) -> (bool, str, str):
+        otherprescale: int, ignore_zero_prescales : bool = False,
+        check_prescales : bool = True, lazy : bool = False) -> (bool, str, str):
     """
     Checks whether 'seed' has a tigher isolation cut than 'otherseed'.
 
@@ -1281,8 +1336,14 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str,
 
     Optional parameters
     -------------------
-    ignore_prescale : bool
+    ignore_zero_prescales : bool
         Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        If True, do not consider seeds which differ from 'seed' in more aspects
+        than the current criterion (default: False)
 
     Returns
     -------
@@ -1294,10 +1355,10 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str,
 
     """
 
-    if not ignore_prescale and prescale < otherprescale:
+    if check_prescales and prescale < otherprescale:
         return False, None, None
 
-    if not ignore_prescale and otherprescale == 0:
+    if not ignore_zero_prescales and otherprescale == 0:
         return False, None, None
 
     is_backup_candidate = False
@@ -1340,7 +1401,7 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str,
 
     # do not process further if the seeds are different (apart from their
     # isolation criteria)
-    if seed_stripped != otherseed_stripped:
+    if not lazy and seed_stripped != otherseed_stripped:
         return False, None, None
 
     if seed_iso_str == 'Iso' and otherseed_iso_str == 'LooseIso':
@@ -1367,6 +1428,10 @@ if __name__ == '__main__':
             help='Make script less verbose',
             action='store_true',
             dest='quietmode')
+    parser.add_argument('--no-prescale-checks',
+            help='Do not check whether backup seed prescales are larger than or equal to other prescales',
+            action='store_true',
+            dest='no_prescale_checks')
     parser.add_argument('--keep-zero-prescales',
             help='Do not ignore seeds with zero prescales (default: False)',
             action='store_true',
@@ -1379,6 +1444,7 @@ if __name__ == '__main__':
 
     table = read_table(args.filename)
     signal_seeds, backup_seeds = separate_signal_and_backup_seeds(table,
+            check_prescales=(False if args.no_prescale_checks else True),
             keep_zero_prescales=(True if args.keep_zero_prescales else False),
             verbose=(False if args.quietmode else True))
 
