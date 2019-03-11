@@ -167,10 +167,15 @@ def convert_to_float(val: str) -> Union[float,None]:
 
 
 def separate_signal_and_backup_seeds(table: pd.DataFrame,
-        check_prescales=True, keep_zero_prescales=False,
+        check_prescales=True, keep_zero_prescales=False, write_mode='inclusive',
         verbose=True) -> (pd.DataFrame,
                 pd.DataFrame):
     # TODO add docstring
+
+    allowed_modes = ['inclusive','unprescaled','prescaled']
+    if ([m == write_mode for m in allowed_modes]).count(True) != 1:
+        raise RuntimeError('Expect exactly one of the following modes: {} '
+                '(got {})'.format(', '.join(allowed_modes), write_mode))
 
     signal_seeds = pd.DataFrame(columns=table.columns)
     backup_seeds = pd.DataFrame(columns=table.columns)
@@ -183,6 +188,15 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
     for idx,row in table.iterrows():
         seed = row[name_col_idx]
         prescale = row[PS_col_idx]
+
+        if write_mode == 'unprescaled' and prescale != 1:
+            continue  # write only unprescaled seeds
+            
+        elif write_mode == 'prescaled' and prescale <= 1:
+            continue  # write only prescaled seeds
+
+        elif write_mode == 'inclusive':
+            pass  # write all seeds
 
         # ignore seeds that don't add to the total rate
         if not keep_zero_prescales and prescale == 0: continue
@@ -1432,6 +1446,11 @@ if __name__ == '__main__':
             help='Do not check whether backup seed prescales are larger than or equal to other prescales',
             action='store_true',
             dest='no_prescale_checks')
+    parser.add_argument('-m', '--mode',
+            help='Specifiy which seeds to write. Allowed options are \'inclusive\', \'unprescale\' and \'prescaled\' (default: inclusive)',
+            action='store',
+            default='inclusive',
+            dest='write_mode')
     parser.add_argument('--keep-zero-prescales',
             help='Do not ignore seeds with zero prescales (default: False)',
             action='store_true',
@@ -1446,6 +1465,7 @@ if __name__ == '__main__':
     signal_seeds, backup_seeds = separate_signal_and_backup_seeds(table,
             check_prescales=(False if args.no_prescale_checks else True),
             keep_zero_prescales=(True if args.keep_zero_prescales else False),
+            write_mode=args.write_mode,
             verbose=(False if args.quietmode else True))
 
     signal_seeds.to_csv(outfile_signal+'.csv')
