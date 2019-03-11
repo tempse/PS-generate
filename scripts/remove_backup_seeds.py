@@ -251,6 +251,7 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
     criterion_functions = [
         (criterion_prescale,  ''),
         (criterion_pT,        ''),
+        (criterion_pT_extra,  ''),
         (criterion_er,        ''),
         (criterion_dRmax,     ''),
         (criterion_dRmin,     ''),
@@ -681,6 +682,121 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
 
     return is_backup_candidate, (otherseed if is_backup_candidate else None), \
             ('pT' if is_backup_candidate else None)
+
+
+def criterion_pT_extra(seed: str, prescale: int, otherseed: str, otherprescale: int,
+        ignore_zero_prescales : bool = False, check_prescales : bool = True,
+        lazy : bool = False) -> (bool, str, str):
+    """
+    Checks whether 'seed' has a tigher pT restriction cut than 'otherseed' for
+    some special cases in which the pT threshold is in the middle of the name.
+
+    Extra checks: Apply the pT threhold criteria in cases where the number XX
+    is the only difference between two seeds, and XX applies to one of
+    - EGXX
+    - ETMHFXX
+    - HTTXX
+    - _MtXX
+    - TauXX
+    - Mass_MinXX
+
+    If 'seed' and 'otherseed' have any differences apart from their extra pT
+    restrictions, this function will pass on them.
+
+    Parameters
+    ---------
+    seed : str
+        Name of the seed which is checked for its 'backup seed' properties
+    precale : int
+        Prescale value for 'seed'
+    otherseed : str
+        Name of the algorithm which 'seed' is checked against
+    otherprescale : int
+        Prescale value for 'otherseed'
+
+    Optional parameters
+    -------------------
+    ignore_zero_prescales : bool
+        Ignore if the two seeds have different prescale values (default: False)
+    check_prescales : bool
+        If True, make sure that the prescale value of 'seed' is not smaller
+        than the one of 'otherseed' (default: True)
+    lazy : bool
+        If True, do not consider seeds which differ from 'seed' in more aspects
+        than the current criterion (default: False)
+
+    Returns
+    -------
+    (bool, str)
+        True if 'seed' is a backup seed to 'otherseed' or False otherwise,
+        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        None otherwise, name of the criterion function (None if 'seed' is not a
+        backup seed)
+
+    """
+
+    if check_prescales and prescale < otherprescale:
+        return False, None, None
+
+    if not ignore_zero_prescales and otherprescale == 0:
+        return False, None, None
+
+    is_backup_candidate = False
+
+    seed_basename = get_seed_basename(seed)
+    otherseed_basename = get_seed_basename(otherseed)
+
+    # skip invalid seeds
+    if any([basename is None for basename in (seed_basename,
+            otherseed_basename)]):
+        return False, None, None
+
+    # skip if different seeds altogether
+    if seed_basename != otherseed_basename:
+        return False, None, None
+
+    # remove seed basenames such that the algorithm does not focus on the
+    # beginnings of the seeds and does not process seeds which have already been
+    # treated by the criterion_pT function (e.g., L1_SingleEG40er2p5)
+    seed_stripped = seed.replace(seed_basename, '')
+    otherseed_stripped = otherseed.replace(otherseed_basename, '')
+
+    # collection of patterns to look out for
+    patterns = (
+            (r'EG(\d+)',       'EG'),
+            (r'ETMHF(\d+)',    'ETMHF'),
+            (r'HTT(\d+)',      'HTT'),
+            (r'_Mt(\d+)',      'Mt'),
+            (r'Tau(\d+)',      'Tau'),
+            (r'Mass_Min(\d+)', 'Mass_Min'),
+    )
+
+    for pattern,cond in patterns:
+        search_res_seed = re.search(pattern, seed_stripped)
+        search_res_otherseed = re.search(pattern, otherseed_stripped)
+
+        # if the respective pattern is found in both seeds, make sure that there
+        # are no other differences between the seeds
+        if search_res_seed and search_res_otherseed:
+            seed_threshold = search_res_seed.group(1)
+            otherseed_threshold = search_res_otherseed.group(1)
+
+            seed_stripped = seed_stripped.replace(
+                    cond + seed_threshold, cond)
+            otherseed_stripped = otherseed_stripped.replace(
+                    cond + otherseed_threshold, cond)
+
+            # skip if there are any further differences
+            if seed_stripped != otherseed_stripped:
+                continue
+
+            if convert_to_float(seed_threshold) > convert_to_float(
+                    otherseed_threshold):
+                is_backup_candidate = True
+                condition = cond
+
+    return is_backup_candidate, (otherseed if is_backup_candidate else None), \
+        ('pT' if is_backup_candidate else None)
 
 
 def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
