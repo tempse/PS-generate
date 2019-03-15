@@ -1580,7 +1580,7 @@ if __name__ == '__main__':
             action='store_true',
             dest='no_prescale_checks')
     parser.add_argument('-m', '--mode',
-            help='Specifiy which seeds to write. Allowed options are \'inclusive\', \'unprescale\' and \'prescaled\' (default: inclusive)',
+            help='Specifiy which seeds to keep in the output files. Allowed options are \'inclusive\', \'unprescaled\' and \'prescaled\' (default: inclusive)',
             action='store',
             default='inclusive',
             dest='write_mode')
@@ -1589,7 +1589,7 @@ if __name__ == '__main__':
             action='store_true',
             dest='keep_zero_prescales')
     parser.add_argument('-b', '--backup-seeds',
-            help='Give a filename containing list of known backup seeds (optional)',
+            help='Give a filename containing a list of known backup seeds (optional)',
             action='store',
             default=None,
             dest='backup_seeds')
