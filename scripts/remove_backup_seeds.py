@@ -167,8 +167,9 @@ def convert_to_float(val: str) -> Union[float,None]:
 
 
 def separate_signal_and_backup_seeds(table: pd.DataFrame,
-        check_prescales=True, keep_zero_prescales=False, write_mode='inclusive',
-        verbose=True) -> (pd.DataFrame,
+        check_prescales : bool = True, keep_zero_prescales : bool = False,
+        write_mode : str ='inclusive', force_backup_seeds : list = None,
+        verbose : bool = True) -> (pd.DataFrame,
                 pd.DataFrame):
     # TODO add docstring
 
@@ -180,6 +181,9 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
     signal_seeds = pd.DataFrame(columns=table.columns)
     backup_seeds = pd.DataFrame(columns=table.columns)
 
+    signal_seeds.set_index(table.columns[0], inplace=True)
+    backup_seeds.set_index(table.columns[0], inplace=True)
+
     backup_seeds_info = []
 
     name_col_idx = get_name_col_idx(table)
@@ -188,6 +192,9 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
     for idx,row in table.iterrows():
         seed = row[name_col_idx]
         prescale = row[PS_col_idx]
+
+        if type(seed) != str: continue
+        if not seed.startswith('L1_'): continue
 
         if write_mode == 'unprescaled' and prescale != 1:
             continue  # write only unprescaled seeds
@@ -201,18 +208,28 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
         # ignore seeds that don't add to the total rate
         if not keep_zero_prescales and prescale == 0: continue
 
-        is_backup_seed, identified_signal_seeds, criteria = has_signal_seed(
-                seed, prescale, table.iloc[:,name_col_idx].tolist(),
-                table.iloc[:,PS_col_idx].tolist(),
-                check_prescales=check_prescales,
-                keep_zero_prescales=keep_zero_prescales)
+        if seed in force_backup_seeds:
+            is_backup_seed = True
+            identified_signal_seeds = []
 
-        signal_seeds_prescales = [(table[table.iloc[:,name_col_idx]==s].iloc[:,
-            PS_col_idx]) for s in identified_signal_seeds]
-        signal_seeds_prescales = [int(ps) for ps in signal_seeds_prescales]
+        if seed not in force_backup_seeds:
+            is_backup_seed, identified_signal_seeds, criteria = has_signal_seed(
+                    seed, prescale, table.iloc[:,name_col_idx].tolist(),
+                    table.iloc[:,PS_col_idx].tolist(),
+                    check_prescales=check_prescales,
+                    keep_zero_prescales=keep_zero_prescales)
 
-        identified_signal_seeds = ['{} (PS: {})'.format(s,str(ps)) for s,ps in \
-                zip(identified_signal_seeds,signal_seeds_prescales)]
+            signal_seeds_prescales = [(table[table.iloc[:,name_col_idx]==s].iloc[:,
+                PS_col_idx]) for s in identified_signal_seeds]
+            signal_seeds_prescales = [int(ps) for ps in signal_seeds_prescales]
+
+            identified_signal_seeds = ['{} (PS: {})'.format(s,str(ps)) for s,ps in \
+                    zip(identified_signal_seeds,signal_seeds_prescales)]
+
+        else:
+            is_backup_seed = True
+            identified_signal_seeds = ['[NaN - backup seed set manually]']
+            criteria = []
 
         if is_backup_seed:
             backup_seeds = backup_seeds.append(table.iloc[idx,:])
@@ -1571,17 +1588,32 @@ if __name__ == '__main__':
             help='Do not ignore seeds with zero prescales (default: False)',
             action='store_true',
             dest='keep_zero_prescales')
+    parser.add_argument('-b', '--backup-seeds',
+            help='Give a filename containing list of known backup seeds (optional)',
+            action='store',
+            default=None,
+            dest='backup_seeds')
 
     args = parser.parse_args()
 
     outfile_signal = 'signal_seeds'
     outfile_backup = 'backup_seeds'
 
+    # extract seed names line by line from the file with known backup seeds
+    known_backup_seeds = []
+    if args.backup_seeds:
+        with open(args.backup_seeds, 'r') as f:
+            raw_content = [s.strip('\n') for s in f.readlines()]
+            for l in raw_content:
+                search_res = re.search(r'(L1_\S+)', l)
+                if search_res: known_backup_seeds.append(search_res.group(1))
+
     table = read_table(args.filename)
     signal_seeds, backup_seeds = separate_signal_and_backup_seeds(table,
             check_prescales=(False if args.no_prescale_checks else True),
             keep_zero_prescales=(True if args.keep_zero_prescales else False),
             write_mode=args.write_mode,
+            force_backup_seeds=known_backup_seeds,
             verbose=(False if args.quietmode else True))
 
     signal_seeds.to_csv(outfile_signal+'.csv')
