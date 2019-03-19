@@ -1,21 +1,21 @@
 # Backup seed identification script
 
-A script that finds (most of) the seeds in a rate table that are backup seeds to
-other seeds and creates separate rate tables for backup and no-backup seeds in
-different formats (inclusive / unprescaled / prescaled).
+A script that finds (most of) the seeds in a prescale (PS) table that are backup
+seeds to other seeds and creates separate tables for backup and no-backup seeds
+in different formats (inclusive / unprescaled / prescaled).
 
 ## Basic usage
 
 In its simplest form, the script can be run as follows:
 ```
-python remove_backup_seeds.py <rate-table>
+python remove_backup_seeds.py <PS-table>
 ```
-where `<rate-table>` is a rate table containing, i.a., seed names and prescale
-values in CSV format (see [this example of a valid rate table](/tests/data/menu_v2_1_0_rate.csv)).
+where `<PS-table>` is a table containing seed names and prescale values in CSV
+format (see [this example of a valid table](/tests/data/menu_v2_1_0_rate.csv)).
 
 ### Positional arguments (required)
 
-- `filename`: Name/path of the CSV rate table file
+- `filename`: Name/path of the CSV prescale table file
 
 ### Optional arguments
 
@@ -36,7 +36,7 @@ values in CSV format (see [this example of a valid rate table](/tests/data/menu_
 
 - Run in "default mode" (i.e., ignore all PS=0 seeds, require backup seeds to
   always have at least the same prescales as their potential no-backup seed
-  counterparts, create output rate tables allowing all prescale values):
+  counterparts, create output tables allowing all prescale values):
   ```
   python remove_backup_seeds.py ../tests/data/menu_v2_1_0_rate.csv
   ```
@@ -79,7 +79,7 @@ applies:
 
 ### Algorithm outline
 
-1) Import a rate table in CSV format.
+1) Import a prescale table in CSV format.
 
 1) Loop over the seeds, for each seed do...
     1) Create all possible pairings between the current seeds and all other
