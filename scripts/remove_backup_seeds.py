@@ -369,10 +369,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
     seed_basename = get_seed_basename(seed)
     otherseed_basename = get_seed_basename(otherseed)
 
-    # skip if different seeds altogether
-    if seed_basename != otherseed_basename:
-        return False, None, None
-    elif seed_basename is None or otherseed_basename is None:
+    if seed_basename is None or otherseed_basename is None:
         return False, None, None
 
     # distinguish between single, double, triple and quadruple seed objects
@@ -768,10 +765,6 @@ def criterion_pT_extra(seed: str, prescale: int, otherseed: str, otherprescale: 
             otherseed_basename)]):
         return False, None, None
 
-    # skip if different seeds altogether
-    if seed_basename != otherseed_basename:
-        return False, None, None
-
     # remove seed basenames such that the algorithm does not focus on the
     # beginnings of the seeds and does not process seeds which have already been
     # treated by the criterion_pT function (e.g., L1_SingleEG40er2p5)
@@ -872,10 +865,6 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
 
     seed_basename = get_seed_basename(seed)
     otherseed_basename = get_seed_basename(otherseed)
-
-    # skip if different seeds altogether
-    if seed_basename != otherseed_basename:
-        return False, None, None
 
     # do not process further if there are multiple eta restrictions in a seed
     pattern = r'er(\d+)p(\d+)|er(\d+)'
@@ -984,10 +973,6 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str,
     seed_basename = get_seed_basename(seed)
     otherseed_basename = get_seed_basename(otherseed)
 
-    # skip if different seeds altogether
-    if seed_basename != otherseed_basename:
-        return False, None, None
-
     # do not process further if there are multiple dRmax restrictions
     pattern = r'dR_Max(\d+)p(\d+)|dR_Max(\d+)'
     if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
@@ -1095,10 +1080,6 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str,
     seed_basename = get_seed_basename(seed)
     otherseed_basename = get_seed_basename(otherseed)
 
-    # skip if different seeds altogether
-    if seed_basename != otherseed_basename:
-        return False, None, None
-
     # do not process further if there are multiple dRmin restrictions
     pattern = r'dR_Min(\d+)p(\d+)|dR_Min(\d+)'
     if any([len(re.findall(pattern, s)) > 1 for s in (seed, otherseed)]):
@@ -1205,10 +1186,6 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str,
 
     seed_basename = get_seed_basename(seed)
     otherseed_basename = get_seed_basename(otherseed)
-
-    # skip if different seeds altogether
-    if seed_basename != otherseed_basename:
-        return False, None, None
 
     # do not process further if there are multiple mass restrictions in a seed
     pattern = r'Mass(_*?)(\d+p\d+|\d+)to(\d+p\d+|\d+)'
@@ -1334,9 +1311,6 @@ def criterion_quality(seed: str, prescale: int, otherseed: str,
 
     if not any([muontype in seed_basename.lower() for muontype in ('singlemu',
             'doublemu', 'triplemu', 'quadmu')]):
-        return False, None, None
-
-    if not otherseed.startswith(seed_basename):
         return False, None, None
 
     do_further_checks = False
@@ -1512,10 +1486,6 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str,
 
     seed_basename = get_seed_basename(seed)
     otherseed_basename = get_seed_basename(otherseed)
-
-    # skip if different events alltogether
-    if seed_basename != otherseed_basename:
-        return False, None, None
 
     # do not process further if there are multiple isolation criteria in a seed
     pattern = r'Iso|LooseIso'
