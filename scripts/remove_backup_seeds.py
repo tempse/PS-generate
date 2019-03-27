@@ -166,7 +166,7 @@ def convert_to_float(val: str) -> Union[float,None]:
 
 
 
-def separate_signal_and_backup_seeds(table: pd.DataFrame,
+def separate_main_and_backup_seeds(table: pd.DataFrame,
         check_prescales : bool = True, keep_zero_prescales : bool = False,
         write_mode : str ='inclusive', force_backup_seeds : list = None,
         verbose : bool = True) -> (pd.DataFrame,
@@ -178,10 +178,10 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
         raise RuntimeError('Expect exactly one of the following modes: {} '
                 '(got {})'.format(', '.join(allowed_modes), write_mode))
 
-    signal_seeds = pd.DataFrame(columns=table.columns)
+    main_seeds = pd.DataFrame(columns=table.columns)
     backup_seeds = pd.DataFrame(columns=table.columns)
 
-    signal_seeds.set_index(table.columns[0], inplace=True)
+    main_seeds.set_index(table.columns[0], inplace=True)
     backup_seeds.set_index(table.columns[0], inplace=True)
 
     backup_seeds_info = []
@@ -210,39 +210,39 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
 
         if seed in force_backup_seeds:
             is_backup_seed = True
-            identified_signal_seeds = []
+            identified_main_seeds = []
 
         if seed not in force_backup_seeds:
-            is_backup_seed, identified_signal_seeds, criteria = has_signal_seed(
+            is_backup_seed, identified_main_seeds, criteria = has_main_seed(
                     seed, prescale, table.iloc[:,name_col_idx].tolist(),
                     table.iloc[:,PS_col_idx].tolist(),
                     check_prescales=check_prescales,
                     keep_zero_prescales=keep_zero_prescales)
 
-            signal_seeds_prescales = [(table[table.iloc[:,name_col_idx]==s].iloc[:,
-                PS_col_idx]) for s in identified_signal_seeds]
-            signal_seeds_prescales = [int(ps) for ps in signal_seeds_prescales]
+            main_seeds_prescales = [(table[table.iloc[:,name_col_idx]==s].iloc[:,
+                PS_col_idx]) for s in identified_main_seeds]
+            main_seeds_prescales = [int(ps) for ps in main_seeds_prescales]
 
-            identified_signal_seeds = ['{} (PS: {})'.format(s,str(ps)) for s,ps in \
-                    zip(identified_signal_seeds,signal_seeds_prescales)]
+            identified_main_seeds = ['{} (PS: {})'.format(s,str(ps)) for s,ps in \
+                    zip(identified_main_seeds,main_seeds_prescales)]
 
         else:
             is_backup_seed = True
-            identified_signal_seeds = ['[NaN - backup seed set manually]']
+            identified_main_seeds = ['[NaN - backup seed set manually]']
             criteria = []
 
         if is_backup_seed:
             backup_seeds = backup_seeds.append(table.iloc[idx,:])
             backup_seeds_info.append([seed, prescale,
-                ', '.join(identified_signal_seeds), ', '.join(criteria)])
+                ', '.join(identified_main_seeds), ', '.join(criteria)])
 
         else:
-            signal_seeds = signal_seeds.append(table.iloc[idx,:])
+            main_seeds = main_seeds.append(table.iloc[idx,:])
 
     backup_seeds_info_headers = ['Identified backup seed',
             'prescale value',
-            'corresponding signal seeds (incl. prescales)',
-            'used criteria (in signal seed order)']
+            'corresponding main seeds (incl. prescales)',
+            'used criteria (in main seed order)']
     if verbose:
         print(tabulate(backup_seeds_info, headers=backup_seeds_info_headers))
 
@@ -254,10 +254,10 @@ def separate_signal_and_backup_seeds(table: pd.DataFrame,
             print('\nFile created: {} (contains the above backup seeds '
                     'summary)'.format(backup_seeds_summary_fname))
 
-    return signal_seeds, backup_seeds
+    return main_seeds, backup_seeds
 
 
-def has_signal_seed(seed: str, prescale: int, all_seeds: list,
+def has_main_seed(seed: str, prescale: int, all_seeds: list,
         all_prescales: list, check_prescales : bool = True,
         keep_zero_prescales : bool = False) -> (bool,
                 list, list):
@@ -278,13 +278,13 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
     ]
 
     is_backup_seed = False
-    identified_signal_seeds = []
+    identified_main_seeds = []
     criteria = []
 
     for otherseed,otherprescale in zip(all_seeds, all_prescales):
         for (criterion,options) in criterion_functions:
             if not all([type(s) == str for s in (seed,otherseed)]): continue
-            is_backup_candidate, identified_signal_seed, identified_criterion = criterion(
+            is_backup_candidate, identified_main_seed, identified_criterion = criterion(
                     seed, prescale, otherseed, otherprescale,
                     lazy=(True if 'lazy' in options else False),
                     check_prescales=(True if check_prescales else False),
@@ -292,10 +292,10 @@ def has_signal_seed(seed: str, prescale: int, all_seeds: list,
 
             if is_backup_candidate:
                 is_backup_seed = True
-                identified_signal_seeds.append(identified_signal_seed)
+                identified_main_seeds.append(identified_main_seed)
                 criteria.append(identified_criterion)
 
-    return is_backup_seed, identified_signal_seeds, criteria
+    return is_backup_seed, identified_main_seeds, criteria
 
 
 def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
@@ -352,7 +352,7 @@ def criterion_pT(seed: str, prescale: int, otherseed: str, otherprescale: int,
     -------
     (bool, str, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, name of the criterion (None if 'seed' is not a backup
         seed)
 
@@ -743,7 +743,7 @@ def criterion_pT_extra(seed: str, prescale: int, otherseed: str, otherprescale: 
     -------
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, name of the criterion function (None if 'seed' is not a
         backup seed)
 
@@ -849,7 +849,7 @@ def criterion_er(seed: str, prescale: int, otherseed: str, otherprescale: int,
     -------
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, name of the criterion function (None if 'seed' is not a
         backup seed)
 
@@ -956,7 +956,7 @@ def criterion_dRmax(seed: str, prescale: int, otherseed: str,
     -------
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, name of the criterion (None if 'seed' is not a backup
         seed)
 
@@ -1063,7 +1063,7 @@ def criterion_dRmin(seed: str, prescale: int, otherseed: str,
     -------
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, the name of the criterion (None if 'seed' is not a
         backup seed)
 
@@ -1170,7 +1170,7 @@ def criterion_MassXtoY(seed: str, prescale: int, otherseed: str,
     -------
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, name of the criterion (None if 'seed' is not a backup
         seed)
 
@@ -1288,7 +1288,7 @@ def criterion_quality(seed: str, prescale: int, otherseed: str,
     -------
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, the name of the criterion (None if 'seed' is not a
         backup seed)
 
@@ -1365,9 +1365,9 @@ def criterion_quality(seed: str, prescale: int, otherseed: str,
         if seed_stripped == otherseed_stripped:
             is_backup_candidate = True
 
-    identified_signal_seed = otherseed if is_backup_candidate else None
+    identified_main_seed = otherseed if is_backup_candidate else None
 
-    return is_backup_candidate, identified_signal_seed, \
+    return is_backup_candidate, identified_main_seed, \
             ('muon quality' if is_backup_candidate else None)
 
 
@@ -1406,7 +1406,7 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str,
     -------
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, the name of the criterion (None if 'seed' is not a
         backup seed)
 
@@ -1419,12 +1419,12 @@ def criterion_prescale(seed: str, prescale: int, otherseed: str,
         return False, None, None
 
     is_backup_candidate = False
-    identified_signal_seed = None
+    identified_main_seed = None
     if seed == otherseed and prescale > otherprescale:
         is_backup_candidate = True
-        identified_signal_seed = otherseed
+        identified_main_seed = otherseed
 
-    return is_backup_candidate, identified_signal_seed, \
+    return is_backup_candidate, identified_main_seed, \
             ('prescale' if is_backup_candidate else None)
 
 
@@ -1470,7 +1470,7 @@ def criterion_isolation(seed: str, prescale: int, otherseed: str,
     -------
     (bool, str)
         True if 'seed' is a backup seed to 'otherseed' or False otherwise,
-        the name of the other seed if 'otherseed' is a signal seed to 'seed' or
+        the name of the other seed if 'otherseed' is a main seed to 'seed' or
         None otherwise, the name of the criterion (None if 'seed' is not a
         backup seed)
 
@@ -1566,7 +1566,7 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    outfile_signal = 'signal_seeds'
+    outfile_main = 'main_seeds'
     outfile_backup = 'backup_seeds'
 
     # extract seed names line by line from the file with known backup seeds
@@ -1579,18 +1579,18 @@ if __name__ == '__main__':
                 if search_res: known_backup_seeds.append(search_res.group(1))
 
     table = read_table(args.filename)
-    signal_seeds, backup_seeds = separate_signal_and_backup_seeds(table,
+    main_seeds, backup_seeds = separate_main_and_backup_seeds(table,
             check_prescales=(False if args.no_prescale_checks else True),
             keep_zero_prescales=(True if args.keep_zero_prescales else False),
             write_mode=args.write_mode,
             force_backup_seeds=known_backup_seeds,
             verbose=(False if args.quietmode else True))
 
-    signal_seeds.to_csv(outfile_signal+'.csv')
-    signal_seeds.to_html(outfile_signal+'.html')
+    main_seeds.to_csv(outfile_main+'.csv')
+    main_seeds.to_html(outfile_main+'.html')
     if not args.quietmode:
-        print('\nFiles created: {}[.csv/.html] (each contains {} signal seeds)'.format(
-            outfile_signal, signal_seeds.shape[0]))
+        print('\nFiles created: {}[.csv/.html] (each contains {} main seeds)'.format(
+            outfile_main, main_seeds.shape[0]))
 
     backup_seeds.to_csv(outfile_backup+'.csv')
     backup_seeds.to_html(outfile_backup+'.html')

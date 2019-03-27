@@ -85,7 +85,7 @@ applies:
     1) Create all possible pairings between the current seeds and all other
 	   seeds.
 	1) A backup seed is required to have a larger or equal prescale value than
-	   a potential "signal" (no-backup) seed, unless the option
+	   a potential "main" (no-backup) seed, unless the option
 	   `--no-prescale-checks` is given (in which case prescales are ignored
 	   altogether).
     1) For each seed pair, require that at least one of the "backup seed
@@ -97,6 +97,6 @@ applies:
 
 1) Output several result tables (as CSV+HTML):
     1) table of backup seeds
-    1) table of "signal" (i.e., no-backup) seeds
-    1) summary of identified backup seeds (incl. their associated signal seeds
+    1) table of "main" (i.e., no-backup) seeds
+    1) summary of identified backup seeds (incl. their associated main seeds
 	   and the criteria responsible for the respective decisions)
