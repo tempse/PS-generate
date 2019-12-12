@@ -1,3 +1,6 @@
+> Notice: This project has been moved to https://github.com/cms-l1-dpg/L1MenuTools.
+
+
 ![](https://img.shields.io/badge/version-0.2.0-blue.svg)
 
 # PS-tools
